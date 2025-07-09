@@ -1,0 +1,21 @@
+.home {
+  text-align: center;
+}
+
+.home-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.home-title {
+  font-size: 3.2em;
+  line-height: 1.1;
+  margin: 1em 0;
+}
+
+.home-docs-link {
+  color: #888;
+  margin-top: 2em;
+}
