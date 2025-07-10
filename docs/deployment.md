@@ -26,7 +26,7 @@ Before you can deploy, you'll need:
 
 ### Variables
 
-1. `DEPLOY_ANT_PROCESS_ID`: Your ArNS name's ANT process ID
+1. `DEPLOY_ARNS_NAME`: Your ArNS name
    - Get this from [arns.app/#/manage/names](https://arns.app/#/manage/names)
    - Connect your wallet that owns/controls the ArNS name
    - Find your ArNS name in the list
