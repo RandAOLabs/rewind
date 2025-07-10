@@ -1,21 +1,25 @@
 .home {
+  padding: 2rem;
   text-align: center;
 }
 
-.home-logos {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
+.home h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  color: var(--grey-800);
 }
 
-.home-title {
-  font-size: 3.2em;
-  line-height: 1.1;
-  margin: 1em 0;
+.home p {
+  font-size: 1.2rem;
+  color: var(--grey-300);
 }
 
-.home-docs-link {
-  color: #888;
-  margin-top: 2em;
+@media (prefers-color-scheme: dark) {
+  .home h1 {
+    color: var(--grey-100);
+  }
+  
+  .home p {
+    color: var(--grey-200);
+  }
 }
