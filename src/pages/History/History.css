@@ -1,0 +1,35 @@
+.history {
+  padding: 2rem;
+}
+
+.history h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: var(--grey-800);
+}
+
+.history h2 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  color: var(--grey-400);
+}
+
+.history p {
+  font-size: 1.1rem;
+  color: var(--grey-300);
+  margin-bottom: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .history h1 {
+    color: var(--grey-100);
+  }
+  
+  .history h2 {
+    color: var(--grey-200);
+  }
+  
+  .history p {
+    color: var(--grey-200);
+  }
+}

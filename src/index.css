@@ -1,11 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap');
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Rubik', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
+  /* Color palette from branding guidelines */
+  --white: #FFFFFF;
+  --black: #000000;
+  
+  /* Greys */
+  --grey-100: #CACAD6;
+  --grey-200: #A3A3AD;
+  --grey-300: #7F7F87;
+  --grey-400: #3B3B45;
+  --grey-500: #303038;
+  --grey-600: #262629;
+  --grey-700: #212124;
+  --grey-800: #1E1E24;
+  --grey-900: #1C1C1F;
+  --grey-950: #0E0E0F;
+  --grey-975: #050505;
+
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: var(--grey-800);
+  background-color: var(--white);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -19,9 +38,9 @@ body {
   min-height: 100vh;
 }
 
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    color: var(--grey-100);
+    background-color: var(--grey-900);
   }
 }

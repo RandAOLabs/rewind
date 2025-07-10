@@ -1,5 +1,2 @@
-export * from './Counter'
-export * from './LogoLink'
-export * from './Layout'
-export * from './Analytics'
-export * from './Loading'
+export { Analytics } from './Analytics'
+export { Loading } from './Loading'

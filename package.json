@@ -12,6 +12,8 @@
     "deploy-undername": "npm run build && permaweb-deploy --deploy-folder ./dist --arns-name $DEPLOY_ARNS_NAME --undername $DEPLOY_UNDERNAME"
   },
   "dependencies": {
+    "ao-js-sdk": "0.0.9",
+    "lucide-react": "0.525.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-ga4": "2.1.0",
