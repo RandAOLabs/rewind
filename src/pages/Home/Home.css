@@ -1,25 +1,114 @@
+/* Home.css */
 .home {
-  padding: 2rem;
-  text-align: center;
+  background-color: #000;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.home h1 {
+/* ── NAV ── */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+}
+
+.logo img {
+  height: 32px;
+  width: auto;
+}
+
+.nav-icons .icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-left: 1.5rem;
+  cursor: pointer;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* placeholder backgrounds — replace with your SVG paths */
+.nav-icons .bell    { background-image: url('/assets/icons/bell.svg'); }
+.nav-icons .tool    { background-image: url('/assets/icons/tool.svg'); }
+.nav-icons .settings{ background-image: url('/assets/icons/settings.svg'); }
+
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  /* move from centering to top-aligned */
+  justify-content: flex-start;
+  /* add some space under the nav */
+  padding: 5rem 2rem 2rem;  /* top right/left bottom */
+}
+
+
+.title {
   font-size: 3rem;
   margin-bottom: 1rem;
-  color: var(--grey-800);
 }
 
-.home p {
-  font-size: 1.2rem;
-  color: var(--grey-300);
+.subtitle {
+  font-size: 1rem;
+  color: #aaa;
+  margin-bottom: 2rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  .home h1 {
-    color: var(--grey-100);
-  }
-  
-  .home p {
-    color: var(--grey-200);
-  }
+/* ── SEARCH BAR ── */
+.search-container {
+  display: flex;
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.search-input {
+  flex: 1;
+  padding: 1rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px 0 0 6px;
+  background-color: #111;
+  color: #fff;
+  outline: none;
+}
+
+.search-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  border: none;
+  background-color: #504d4d;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+}
+
+.search-button .icon.search {
+  width: 24px;
+  height: 24px;
+  background-image: url('icons8-search-50.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* add a smooth transition */
+.search-button {
+  transition: filter 0.15s ease, background-color 0.15s ease;
+}
+
+/* lighter on hover */
+.search-button:hover {
+  /* brightness > 1 makes it lighter */
+  filter: brightness(1.2);
+}
+
+/* gray-out on click */
+.search-button:active {
+  /* grayscale + slight darken to “gray it out” */
+  filter: grayscale(100%) brightness(0.8);
 }
