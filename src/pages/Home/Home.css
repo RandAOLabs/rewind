@@ -6,8 +6,7 @@
   display: flex;
   flex-direction: column;
 }
-
-/* ── NAV ── */
+  
 .nav {
   display: flex;
   align-items: center;
@@ -30,19 +29,13 @@
   background-repeat: no-repeat;
 }
 
-/* placeholder backgrounds — replace with your SVG paths */
-.nav-icons .bell    { background-image: url('/assets/icons/bell.svg'); }
-.nav-icons .tool    { background-image: url('/assets/icons/tool.svg'); }
-.nav-icons .settings{ background-image: url('/assets/icons/settings.svg'); }
-
 .hero {
   flex: 1;
   display: flex;
   flex-direction: column;
+  
   text-align: center;
-  /* move from centering to top-aligned */
   justify-content: flex-start;
-  /* add some space under the nav */
   padding: 5rem 2rem 2rem;  /* top right/left bottom */
 }
 
@@ -58,7 +51,6 @@
   margin-bottom: 2rem;
 }
 
-/* ── SEARCH BAR ── */
 .search-container {
   display: flex;
   max-width: 600px;

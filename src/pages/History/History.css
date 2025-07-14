@@ -1,35 +1,142 @@
+/* src/pages/History/History.css */
+
+/*–– your layout vars ––*/
+:root {
+  --header-height: 60px;
+  --footer-height: 60px;
+}
+
+/*–– full-height flex container ––*/
 .history {
-  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.history h1 {
-  font-size: 2.5rem;
-  margin-bottom: 1rem;
-  color: var(--grey-800);
+.history > header {
+  position: fixed; top: 0; left: 0; width: 100%; height: var(--header-height); z-index: 1000;
+}
+.history > footer {
+  position: fixed; bottom: 0; left: 0; width: 100%; height: var(--footer-height); z-index: 1000;
 }
 
-.history h2 {
-  font-size: 1.8rem;
-  margin-bottom: 0.5rem;
-  color: var(--grey-400);
+.history-page.wrapper {
+  flex: 1;
+  max-width: 1200px;
+  margin: var(--header-height) auto var(--footer-height);
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.history p {
-  font-size: 1.1rem;
-  color: var(--grey-300);
-  margin-bottom: 1rem;
+/*–– page header ––*/
+.page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.page-title { font-size: 2.25rem; margin: 0; }
+.page-subtitle { font-size: 1rem; color: var(--text-faded); }
+
+/*–– section titles ––*/
+.section { width: 100%; margin-bottom: 2rem; }
+.section-title { font-size: 1.5rem; text-align: center; margin-bottom: 1rem; }
+
+/*–– generic card-row styling ––*/
+.card-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.card-row .card {
+  flex: 1 1 45%;
+  background-color: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  position: relative;
 }
 
-@media (prefers-color-scheme: dark) {
-  .history h1 {
-    color: var(--grey-100);
-  }
+/*–– undernames ––*/
+.undername-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.undername-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.undername-button {
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.undername-button:hover {
+  background-color: #333;
+  border-color: #555;
+}
+.undername-updated {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #bbb;
+}
+
+/*–– card content styling ––*/
+.card p { margin: 0.5rem 0; font-size: 0.95rem; }
+.card code { background: #222; padding: 0.1rem 0.3rem; border-radius: 4px; }
+.tx-link { color: #1e90ff; text-decoration: underline; }
+.tx-link:hover { color: #63b3ed; }
+.tag {
+  position: absolute;
+  top: 1rem; right: 1rem;
+  background-color: #333; color: #fff;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+/*–– fallback ––*/
+.no-name {
+  color: #f55;
+  text-align: center;
+  font-size: 1.2rem;
+  margin-top: 2rem;
+}
+
+/* ========== STACK historical cards ========== */
+.historical-states .card-row {
+  flex-direction: column;   /* switch from row to column */
+}
+
+.historical-states .card-row .card {
+  flex: 1 1 100%;           /* each card now takes full width */
+}
+
+/* back arrow in top-left below header */
+.back-button {
+  position: fixed;
   
-  .history h2 {
-    color: var(--grey-200);
-  }
-  
-  .history p {
-    color: var(--grey-200);
-  }
+  top: calc(var(--header-height) + 5rem);
+  left: 4rem;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  padding: 0;
+
+}
+.back-button:hover {
+  opacity: 0.8;
 }
