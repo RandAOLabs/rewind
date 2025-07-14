@@ -6,6 +6,7 @@ import Home from './pages/Home/Home'
 
 // Create route with automatic eager loading
 const History = createRoute(() => import('./pages/History/History'))
+const UndernameDetail = createRoute(() => import('./pages/UndernameDetail/UndernameDetail'))
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/history/:arnsname" element={<History />} />
+            <Route path="/history/:arnsname/:undername" element={<UndernameDetail />} />
           </Routes>
         </Suspense>
       </Analytics>

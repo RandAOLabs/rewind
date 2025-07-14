@@ -1,37 +1,58 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Home.css';
-import Footer from '../../shared/components/Footer';
-import Header from '../../shared/components/Header';
+import Footer from '../../shared/components/Footer/Footer';
+import Header from '../../shared/components/Header/Header';
+
 export default function Home() {
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+
+  // Called on form submit or button click
+  const goToDetail = () => {
+    const name = query.trim();
+    if (name) {
+      // adjust this path to match your router
+      navigate(`/history/${encodeURIComponent(name)}`);
+    }
+  };
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    goToDetail();
+  };
+
   return (
+
     <div className="home">
       <Header />
-      <header className="nav">
 
-        <div className="nav-icons">
-          {/* TODO: replace these spans with your actual SVG/icon components */}
-          <span className="icon bell" aria-label="Notifications" />
-          <span className="icon tool" aria-label="Tools" />
-          <span className="icon settings" aria-label="Settings" />
-        </div>
-      </header>
       <main className="hero">
         <h1 className="title">Search Name History</h1>
         <p className="subtitle">
           View the historical ownership and site changes of ar.io domains and undernames.
         </p>
-        <div className="search-container">
+
+        <form className="search-container" onSubmit={onSubmit}>
           <input
             type="text"
             className="search-input"
             placeholder="Search for a name"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
           />
-          <button className="search-button" aria-label="Search">
+          <button
+            type="submit"
+            className="search-button"
+            aria-label="Search"
+            onClick={goToDetail}
+          >
             <span className="icon search" />
           </button>
-        </div>
+        </form>
       </main>
-      <Footer />
+
+    <Footer />
     </div>
   );
 }
