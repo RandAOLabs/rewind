@@ -83,7 +83,7 @@
 .search-button .icon.search {
   width: 24px;
   height: 24px;
-  background-image: url('icons8-search-50.png');
+  background-image: url('../../shared/components/icons/icons8-search-50.png');
   background-size: contain;
   background-repeat: no-repeat;
 }
