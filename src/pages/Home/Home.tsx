@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
-import Header from '../../shared/components/Header/Header';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -25,7 +24,6 @@ export default function Home() {
   return (
 
     <div className="home">
-      <Header />
 
       <main className="hero">
         <h1 className="title">Search Name History</h1>

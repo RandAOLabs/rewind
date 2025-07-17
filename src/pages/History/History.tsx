@@ -20,10 +20,11 @@ interface Undername {
 
 // dummy data for the “current” ANT
 const dummyAntData = {
-  leaseInfo:    '3 years',
+  leaseDuration:    '3 years',
+  expiry:       '2027-08-11',
   processId:    'YWaDxx9CQwDBdp09klnYU5mNAxvu7oqS6YJ4oWr9T4Y',
   targetId:     '-ornXYCNRA3dhXcV3LMMcRx-NbWcjVKIvjO0Q9ciJqk',
-  controllers:  ['bob', 'alice'],
+  controllers:  ['ttOZLNyBZokWYmAlNIDqngzYXj9sEIU22B0sBTJobWc', 'C_3j4_d-GNK0jJrCK65OTkN0Iq6xK-YejtixDRevG7o'],
   owner:        'LTxNyUaVVm-lwR-Wa7Z4LXbz3TvW5btEm-qoD9VhGm4',
   ttl:          '3600s',
   logoTxId:     'hJ3kDfl98a7-AXY12bc34EfGhIjKlmNoPqRsTuVwXyZ',
@@ -79,7 +80,8 @@ export default function History() {
               <div className="card-row">
                 <div className="card">
                   <p><strong>Name:</strong> <code>{arnsname}</code></p>
-                  <p><strong>Lease Info:</strong> <code>{dummyAntData.leaseInfo}</code></p>
+                  <p><strong>Lease Duration:</strong> <code>{dummyAntData.leaseDuration}</code></p>
+                  <p><strong>Expiry Date:</strong> <code>{dummyAntData.expiry}</code></p>
                   <p><strong>Process ID:</strong> <code>{dummyAntData.processId}</code></p>
                   <p><strong>Target ID:</strong> <code>{dummyAntData.targetId}</code></p>
                   <p>
@@ -135,7 +137,7 @@ export default function History() {
                   <div key={i} className="card">
                     <p><strong>Time:</strong> {st.timestamp}</p>
                     <p>
-                      <strong>Transaction:</strong>{' '}
+                      <strong>Updated Page:</strong>{' '}
                       <a
                         href={`https://arweave.net/${st.txHash}`}
                         target="_blank"
