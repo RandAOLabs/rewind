@@ -14,14 +14,15 @@ interface HistoricalState {
 
 // dummy data for this undername
 const dummyUndernameData = {
-  lastUpdated:   '2023-04-01 14:30 UTC',
-  controller:    'alice',
+  lastUpdated:    '2023-04-01 14:30 UTC',
+  dummyPageTxId:  'Q81CsxmUfKuMWBQeWoA1rPaRWuCgigdCFvM97TdHstA',
+  ttl:            '3600',
 }
 
 const dummyHistoricalStates: HistoricalState[] = [
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'AAAaaa111...', action: 'Created undername' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: 'BBBbbb222...', action: 'Transferred controller' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'CCCccc333...', action: 'Updated metadata' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: 'EIQJoqVWonlxsEe8xGpQZhh54wrmgE3q0tAsVIhKYQU', action: 'Created undername' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: 'kuvKD4kpIZ-GY4MxSFhOUWIyVl3Oe8a7JDvBT8LsrbI', action: 'Transferred controller' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: 'hJ3kDfl98a7-AXY12bc34EfGhIjKlmNoPqRsTuVwXyZ', action: 'Updated metadata' },
 ]
 
 export default function UndernameDetail() {
@@ -29,7 +30,6 @@ export default function UndernameDetail() {
   const navigate = useNavigate()
   return (
     <div className="undername-detail-page">
-      <Header />
 
       {/* back arrow */}
       <button
@@ -64,10 +64,18 @@ export default function UndernameDetail() {
                   <strong>Last Updated:</strong>{' '}
                   <code>{dummyUndernameData.lastUpdated}</code>
                 </p>
+                <p><strong>TTL:</strong> <code>{dummyUndernameData.ttl}</code></p>
                 <p>
-                  <strong>Controller:</strong>{' '}
-                  <code>{dummyUndernameData.controller}</code>
-                </p>
+                    <strong>Current Page:</strong>{' '}
+                    <a
+                      href={`https://arweave.net/${dummyUndernameData.dummyPageTxId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tx-link"
+                    >
+                      {dummyUndernameData.dummyPageTxId}
+                    </a>
+                  </p>
               </div>
             </section>
 
@@ -79,7 +87,7 @@ export default function UndernameDetail() {
                   <div key={i} className="card">
                     <p><strong>Time:</strong> {st.timestamp}</p>
                     <p>
-                      <strong>TX:</strong>{' '}
+                      <strong>Updated Page:</strong>{' '}
                       <a
                         href={`https://arweave.net/${st.txHash}`}
                         target="_blank"
