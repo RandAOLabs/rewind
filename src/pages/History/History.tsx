@@ -208,6 +208,9 @@ export default function History() {
           wheel={{ step: 50 }}
           doubleClick={{ disabled: true }}
           limitToBounds={false}
+          centerZoomedOut={false}
+          initialPositionY={125}
+
         >
           {({ zoomIn }) => (
             <>
@@ -218,7 +221,6 @@ export default function History() {
                 <div className="chain-container">
                   {timelineEvents.map((ev) => (
                     <div key={ev.key} className="chain-item">
-                      <div className="chain-point" />
                       {ev.content}
                     </div>
                   ))}
