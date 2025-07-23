@@ -1,142 +1,108 @@
-/* src/pages/History/History.css */
-
-/*–– your layout vars ––*/
-:root {
-  --header-height: 60px;
-  --footer-height: 60px;
-}
-
-/*–– full-height flex container ––*/
 .history {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-.history > header {
-  position: fixed; top: 0; left: 0; width: 100%; height: var(--header-height); z-index: 1000;
-}
-.history > footer {
-  position: fixed; bottom: 0; left: 0; width: 100%; height: var(--footer-height); z-index: 1000;
-}
-
-.history-page.wrapper {
-  flex: 1;
-  max-width: 1200px;
-  margin: var(--header-height) auto var(--footer-height);
-  padding: 0rem 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/*–– page header ––*/
-.page-header {
-  text-align: center;
-  margin-bottom: 1rem;
-}
-.page-title { font-size: 2.25rem; margin: 0; }
-.page-subtitle { font-size: 1rem; color: var(--text-faded); }
-
-/*–– section titles ––*/
-.section { width: 100%; margin-bottom: 2rem; }
-.section-title { font-size: 1.5rem; text-align: center; margin-bottom: 1rem; }
-
-/*–– generic card-row styling ––*/
-.card-row {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  justify-content: space-between;
-}
-.card-row .card {
-  flex: 1 1 45%;
-  background-color: #111;
-  border: 1px solid #222;
-  border-radius: 8px;
-  padding: 1rem 1.5rem;
   position: relative;
+  height: 100%;              /* now takes the full viewport */
+  width: 100%;
 }
-
-/*–– undernames ––*/
-.undername-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.undername-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.undername-button {
-  background-color: #222;
-  color: #fff;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
-  text-decoration: none;
-  font-size: 0.95rem;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-.undername-button:hover {
-  background-color: #333;
-  border-color: #555;
-}
-.undername-updated {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  color: #bbb;
-}
-
-/*–– card content styling ––*/
-.card p { margin: 0.5rem 0; font-size: 0.95rem; }
-.card code { background: #222; padding: 0.1rem 0.3rem; border-radius: 4px; }
-.tx-link { color: #1e90ff; text-decoration: underline; }
-.tx-link:hover { color: #63b3ed; }
-.tag {
-  position: absolute;
-  top: 1rem; right: 1rem;
-  background-color: #333; color: #fff;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-}
-
-/*–– fallback ––*/
-.no-name {
-  color: #f55;
-  text-align: center;
-  font-size: 1.2rem;
-  margin-top: 2rem;
-}
-
-/* ========== STACK historical cards ========== */
-.historical-states .card-row {
-  flex-direction: column;   /* switch from row to column */
-}
-
-.historical-states .card-row .card {
-  flex: 1 1 100%;           /* each card now takes full width */
-}
-
-/* back arrow in top-left below header */
+/*–– back arrow ––*/
 .back-button {
   position: fixed;
-  
-  top: calc(var(--header-height) + 5rem);
-  left: 4rem;
+  top: calc(var(--header-height) + 1rem);
+  left: 1rem;
   background: none;
   border: none;
   color: #fff;
   cursor: pointer;
   z-index: 1001;
-  display: flex;
-  align-items: center;
-  padding: 0;
-
 }
 .back-button:hover {
   opacity: 0.8;
+}
+
+.chain-wrapper {
+  position: absolute;
+  /* top, right, bottom, left inset in one go */
+  inset: var(--header-height) 0 var(--footer-height) 0;
+  overflow: hidden;           /* keep scrollbars hidden */
+}
+
+/*–– zoom/pan controls ––*/
+.chain-controls {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  z-index: 1002;
+}
+.chain-controls button {
+  margin: 0 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: #222;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/*–– pan/zoom area ––*/
+.chain-container {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  cursor: grab;
+}
+
+/*–– each chain item + link line ––*/
+.chain-item {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0 2rem;
+}
+.chain-item::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -2rem;
+  width: 2rem;
+  height: 4px;
+  background: #444;
+  transform: translateY(-50%);
+}
+.chain-item:last-child::after {
+  display: none;
+}
+
+/*–– point marker ––*/
+.chain-point {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1e90ff;
+  margin: 0 auto;
+}
+
+/*–– card styling ––*/
+.chain-card {
+  margin-top: 0.5rem;
+  min-width: 200px;
+  background-color: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1rem;
+  color: #fff;
+  text-align: left;
+}
+.chain-card h3 {
+  margin-top: 0;
+}
+.chain-card p {
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+}
+
+/*–– tx link styling ––*/
+.tx-link {
+  color: #1e90ff;
+  text-decoration: underline;
+}
+.tx-link:hover {
+  color: #63b3ed;
 }

@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 :root {
+  --header-height: 60px;
+  --footer-height: 60px;
+
   font-family: 'Rubik', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -34,6 +37,26 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* make your <Header /> truly fixed */
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--header-height);
+  z-index: 1000;
+}
+
+/* make your <Footer /> truly fixed */
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--footer-height);
+  z-index: 1000;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -45,4 +68,9 @@ body {
     color: var(--grey-100);
     background-color: var(--grey-900);
   }
+}
+/* make the app fill the viewport */
+html, body, #root {
+  height: 100%;
+  margin: 0;
 }
