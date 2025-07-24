@@ -1,7 +1,5 @@
-import React from 'react';
+// src/pages/History/History.tsx
 import { useParams, useNavigate } from 'react-router-dom';
-import Header from '../../shared/components/Header/Header';
-import Footer from '../../shared/components/Footer/Footer';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import './History.css';
@@ -10,11 +8,6 @@ interface HistoricalState {
   timestamp: string;
   txHash: string;
   action: string;
-}
-
-interface Undername {
-  name: string;
-  lastUpdated: string;
 }
 
 const dummyAntData = {
@@ -32,174 +25,117 @@ const dummyAntData = {
   description: 'This is a dummy description for the ANT.',
 };
 
-const dummyUndernames: Undername[] = [
-  { name: 'gamma', lastUpdated: '2023-02-10 11:00 UTC' },
-  { name: 'alpha', lastUpdated: '2023-03-20 09:15 UTC' },
-  { name: 'beta', lastUpdated: '2023-04-01 14:30 UTC' },
-];
-
-const sortedUndernames = [...dummyUndernames].sort(
-  (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-);
-
 const dummyHistoricalStates: HistoricalState[] = [
-  {
-    timestamp: '2023-01-01 12:00 UTC',
-    txHash: '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
-    action: 'Added undername',
-  },
-  {
-    timestamp: '2023-02-15 08:30 UTC',
-    txHash: 'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action: 'Changed page contents',
-  },
-  {
-    timestamp: '2023-03-10 17:45 UTC',
-    txHash: 'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action: 'Removed undername',
-  },
-  {
-    timestamp: '2023-01-01 12:00 UTC',
-    txHash: '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
-    action: 'Added undername',
-  },
-  {
-    timestamp: '2023-02-15 08:30 UTC',
-    txHash: 'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action: 'Changed page contents',
-  },
-  {
-    timestamp: '2023-03-10 17:45 UTC',
-    txHash: 'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action: 'Removed undername',
-  },
-  {
-    timestamp: '2023-01-01 12:00 UTC',
-    txHash: '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
-    action: 'Added undername',
-  },
-  {
-    timestamp: '2023-02-15 08:30 UTC',
-    txHash: 'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action: 'Changed page contents',
-  },
-  {
-    timestamp: '2023-03-10 17:45 UTC',
-    txHash: 'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action: 'Removed undername',
-  },
-  {
-    timestamp: '2023-01-01 12:00 UTC',
-    txHash: '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
-    action: 'Added undername',
-  },
-  {
-    timestamp: '2023-02-15 08:30 UTC',
-    txHash: 'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action: 'Changed page contents',
-  },
-  {
-    timestamp: '2023-03-10 17:45 UTC',
-    txHash: 'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action: 'Removed undername',
-  },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: '…', action: 'Added undername' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: '…', action: 'Changed page contents' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: '…', action: 'Removed undername' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: '…', action: 'Added undername' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: '…', action: 'Changed page contents' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: '…', action: 'Removed undername' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: '…', action: 'Added undername' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: '…', action: 'Changed page contents' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: '…', action: 'Removed undername' },
 ];
+
+// Helper to truncate to first 5 chars
+const truncate5 = (s: string) => s.slice(0, 5);
+
+// Tiny bar right under header, now with back‑button inside it
+function CurrentAntBar({
+  name,
+  onBack,
+}: {
+  name: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="current-ant-bar">
+      <button className="back-button" onClick={onBack} aria-label="Go back">
+        <AiOutlineArrowLeft size={27} />
+      </button>
+
+      <span>ANT Name: <code>{name}</code></span>
+      <span>Expiry: {dummyAntData.expiry}</span>
+      <span>Lease: {dummyAntData.leaseDuration}</span>
+      <span>Process ID: <code>{truncate5(dummyAntData.processId)}...</code></span>
+      <span>Target ID: <code>{truncate5(dummyAntData.targetId)}...</code></span>
+      <span>
+        Controllers: {dummyAntData.controllers.map(c => (truncate5(c)+' . . .')).join(', ')}
+      </span>
+      <span>Owner: <code>{truncate5(dummyAntData.owner)}...</code></span>
+      <span>TTL: {dummyAntData.ttl}</span>
+    </div>
+  );
+}
 
 export default function History() {
-  const { arnsname } = useParams<{ arnsname: string }>();
+  const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
-  const timelineEvents = [
-    {
-      key: 'current',
-      content: (
-        <div className="chain-card">
-          <h3>Current State</h3>
-          <p>
-            <strong>Name:</strong> <code>{arnsname}</code>
-          </p>
-          <p>
-            <strong>Lease Duration:</strong> {dummyAntData.leaseDuration}
-          </p>
-          <p>
-            <strong>Expiry Date:</strong> {dummyAntData.expiry}
-          </p>
-          <p>
-            <strong>Process ID:</strong> <code>{dummyAntData.processId}</code>
-          </p>
-          <p>
-            <strong>Target ID:</strong> <code>{dummyAntData.targetId}</code>
-          </p>
-          <p>
-            <strong>Controllers:</strong>{' '}
-            {dummyAntData.controllers.map((c, i) => (
-              <React.Fragment key={c}>
-                {i > 0 && ', '}
-                <code>{c}</code>
-              </React.Fragment>
-            ))}
-          </p>
-          <p>
-            <strong>Owner:</strong> <code>{dummyAntData.owner}</code>
-          </p>
-          <p>
-            <strong>TTL:</strong> {dummyAntData.ttl}
-          </p>
-          <p>
-            <strong>Undername Count:</strong> {sortedUndernames.length}
-          </p>
-          <p>
-            <strong>Logo TxID:</strong>{' '}
-            <a
-              href={`https://arweave.net/${dummyAntData.logoTxId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tx-link"
-            >
-              {dummyAntData.logoTxId}
-            </a>
-          </p>
-          <p>
-            <strong>Description:</strong> {dummyAntData.description}
-          </p>
-        </div>
-      ),
-    },
-    ...dummyHistoricalStates.map((st, i) => ({
-      key: `hist-${i}`,
-      content: (
-        <div className="chain-card">
-          <h3>{st.action}</h3>
-          <p>
-            <strong>Time:</strong> {st.timestamp}
-          </p>
-          <p>
-            <strong>Tx:</strong>{' '}
-            <a
-              href={`https://arweave.net/${st.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tx-link"
-            >
-              {st.txHash}
-            </a>
-          </p>
-        </div>
-      ),
-    })),
-  ];
+  // only historical events now
+  const timelineEvents = dummyHistoricalStates.map((st, i) => ({
+    key: `hist-${i}`,
+    content: (
+      <div className="chain-card">
+        <h3>{st.action}</h3>
+        <p><strong>Time:</strong> {st.timestamp}</p>
+        <p>
+          <strong>Tx:</strong>{' '}
+          <a
+            href={`https://arweave.net/${st.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tx-link"
+          >
+            {st.txHash}
+          </a>
+        </p>
+      </div>
+    ),
+  }));
 
   return (
     <div className="history">
 
-      <button
-        className="back-button"
-        onClick={() => navigate(-1)}
-        aria-label="Go back"
-      >
-        <AiOutlineArrowLeft size={32} />
-      </button>
+{/* Floating Legend */}
+<div className="legend">
+        <h4>Legend</h4>
+        <div className="legend-section">
+          <div className="legend-title">Card Legend:</div>
+          <div className="legend-item">
+            <span className="dot text-change" /> Text Changes
+          </div>
+          <div className="legend-item">
+            <span className="dot address-change" /> Address Changes
+          </div>
+          <div className="legend-item">
+            <span className="dot resolver-changed" /> Resolver Changed
+          </div>
+          <div className="legend-item">
+            <span className="dot content-hash" /> ContentHash Changed
+          </div>
+          <div className="legend-item">
+            <span className="dot multiple-changes" /> Multiple Changes
+          </div>
+        </div>
+        <div className="legend-section">
+          <div className="legend-title">Data Legend:</div>
+          <div className="legend-item">
+            <span className="dot added-records" /> Added Records
+          </div>
+          <div className="legend-item">
+            <span className="dot updated-records" /> Updated Records
+          </div>
+          <div className="legend-item">
+            <span className="dot removed-records" /> Removed Records
+          </div>
+        </div>
+      </div>
 
+      {/* NEW: current-state, fixed beneath header */}
+      <CurrentAntBar name={arnsname} onBack={() => navigate(-2)} />
+
+      {/* chain, now only historical events */}
       <div className="chain-wrapper">
         <TransformWrapper
           initialScale={1}
@@ -209,22 +145,26 @@ export default function History() {
           doubleClick={{ disabled: true }}
           limitToBounds={false}
           centerZoomedOut={false}
+          centerOnInit={false}
+          initialPositionX={200}
           initialPositionY={125}
 
         >
-          {({ zoomIn }) => (
+          {({ zoomIn, zoomOut, resetTransform }) => (
             <>
               <div className="chain-controls">
-                <button onClick={(e: React.MouseEvent) => { e.preventDefault(); zoomIn(1); }}>+</button>
+                <button onClick={() => zoomIn()}>+</button>
+                <button onClick={() => zoomOut()}>–</button>
+                <button onClick={() => resetTransform()}>⟳</button>
               </div>
-              <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
-                <div className="chain-container">
-                  {timelineEvents.map((ev) => (
-                    <div key={ev.key} className="chain-item">
-                      {ev.content}
-                    </div>
-                  ))}
-                </div>
+              <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ width: '100%', height: '50%' }}>
+                  <div className="chain-container">
+                    {timelineEvents.map(ev => (
+                      <div key={ev.key} className="chain-item">
+                        {ev.content}
+                      </div>
+                    ))}
+                  </div>
               </TransformComponent>
             </>
           )}

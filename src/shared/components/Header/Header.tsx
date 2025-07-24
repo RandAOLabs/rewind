@@ -1,36 +1,54 @@
-import { Link } from 'react-router-dom';
+// src/shared/components/Header/Header.tsx
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import logoLight from '../icons/ar.io-logo-square-light.png';
+import './Header.css';
+import { AiOutlineSearch } from 'react-icons/ai';
 
 export default function Header() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+
+  // match /history/:name
+  const historyMatch = location.pathname.match(/^\/history\/([^/]+)$/);
+  const isHistoryPage = Boolean(historyMatch);
+
+  const onSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = query.trim();
+    if (name) {
+      navigate(`/history/${encodeURIComponent(name)}`);
+      setQuery('');
+    }
+  };
+
   return (
-    <header
-      style={{
-        height: '5rem',
-        backgroundColor: '#131314',
-        
-      }}
-    >
-      <div
-        style={{
-          maxWidth: '1024px',
-          margin: '0 auto',
-          padding: '0.25rem 1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          height: '100%',
-        }}
-      >
-        <a href="/" data-discover="true">
+    <header className="app-header">
+      <div className="header-inner">
+        <Link to="/" data-discover="true" className="logo-link">
           <img
             src={logoLight}
             alt="AR.IO logo"
-            style={{
-              height: '3rem',  // ← force it to 24px tall
-              width: 'auto',
-            }}
+            className="logo-img"
           />
-        </a>
+        </Link>
+
+        {isHistoryPage && (
+          <form className="header-search" onSubmit={onSearchSubmit}>
+            <input
+              type="text"
+              className="header-search-input"
+              placeholder="Jump to another name"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+            <button type="submit" className="header-search-btn" aria-label="Search">
+              <AiOutlineSearch size={18} />
+            </button>
+          </form>
+        )}
       </div>
     </header>
-  )
+);
 }

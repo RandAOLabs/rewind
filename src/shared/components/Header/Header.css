@@ -1,0 +1,72 @@
+/* src/shared/components/Header/Header.css */
+
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--header-height);
+    background-color: #131314;
+    z-index: 1000;
+  }
+  
+  .header-inner {
+    width: 100%;
+    max-width: 1024px;
+    margin: 0;
+    padding: 0.25rem 5.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* logo left, search right */
+    height: 100%;
+  }
+  
+  /* logo tweaks */
+  .logo-link {
+    display: flex;
+    align-items: center;
+  }
+  .logo-img {
+    height: 3rem;
+    width: auto;
+  }
+  
+  /* small header search */
+  .header-search {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    position: absolute;
+    right: 15rem;
+  }
+  
+  .header-search-input {
+    width: 240px;
+    height: 1.6rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    border: 2px solid var(--grey-500);
+    border-radius: 4px;
+    background: var(--grey-950);
+    color: var(--grey-100);
+  }
+  
+  .header-search-input::placeholder {
+    color: var(--grey-500);
+  }
+  
+  .header-search-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem;
+    background: var(--grey-950);
+    border: 0px solid var(--grey-600);
+    border-radius: 4px;
+    color: var(--grey-100);
+    cursor: pointer;
+  }
+  .header-search-btn:hover {
+    background: var(--grey-700);
+  }
+  
