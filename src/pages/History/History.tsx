@@ -26,15 +26,16 @@ const dummyAntData = {
 };
 
 const dummyHistoricalStates: HistoricalState[] = [
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'mTvrEG1iE7Jscnmm9tUpNjZWUX23mpYC4iBS38IKfzc', action: 'Added undername' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: 'wGljtpe4tSsISgVuqXmg4uQYQrE60dtmb2Pup45pn3U', action: 'Changed page contents' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'mM1OLVPVXWQyMC-M6NV6PwoAryYJuchx3QvnkGvrvLU', action: 'Removed undername' },
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'oVpt5ivH7ib1UwngQIJqsXAIG8-eZcL4QnJ6_hp2ZRI', action: 'Added undername' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: '-Qa-AUcSv-DOlyXDNRrBgBsH9-Xu1ycn1v6LIkBOhHg', action: 'Changed page contents' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'Q97Ho_IVJOck4U2OeprYolFGgGoPUUVbEwaZcQR16Gc', action: 'Removed undername' },
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'Z-g2JcLBHGdqSec83psGLOW_4OxGXJxKPc8l9LZ2apQ', action: 'Added undername' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: 'utEtBv4mWbvq28_x93NlcwjxaV21nBWb-SOrOXEFVu0', action: 'Changed page contents' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'fu_BiQNqxdvwez3v_0Y0tktOI572UwsOlVmHY6oLK38', action: 'Removed undername' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: 'mTvrEG1iE7Jscnmm9tUpNjZWUX23mpYC4iBS38IKfzc', action: 'Purchased ANT' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: 'wGljtpe4tSsISgVuqXmg4uQYQrE60dtmb2Pup45pn3U', action: 'Added Undername' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: 'mM1OLVPVXWQyMC-M6NV6PwoAryYJuchx3QvnkGvrvLU', action: 'Renewed ANT' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: 'oVpt5ivH7ib1UwngQIJqsXAIG8-eZcL4QnJ6_hp2ZRI', action: 'Changed Page Content' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: '-Qa-AUcSv-DOlyXDNRrBgBsH9-Xu1ycn1v6LIkBOhHg', action: 'Renewed ANT' },
+  { timestamp: '2023-02-21 12:00 UTC', txHash: '6gke47oVpt5ivH7ib1UwngQIJqsXAIG8-eZcL4QnJ6_', action: 'Changed Page Content' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: 'Q97Ho_IVJOck4U2OeprYolFGgGoPUUVbEwaZcQR16Gc', action: 'Renewed ANT' },
+  { timestamp: '2023-01-01 12:00 UTC', txHash: 'Z-g2JcLBHGdqSec83psGLOW_4OxGXJxKPc8l9LZ2apQ', action: 'Added Undername' },
+  { timestamp: '2023-02-15 08:30 UTC', txHash: 'utEtBv4mWbvq28_x93NlcwjxaV21nBWb-SOrOXEFVu0', action: 'Changed Page Content' },
+  { timestamp: '2023-03-10 17:45 UTC', txHash: 'fu_BiQNqxdvwez3v_0Y0tktOI572UwsOlVmHY6oLK38', action: 'Removed Undername' },
 ];
 
 // Helper to truncate to first 5 chars
