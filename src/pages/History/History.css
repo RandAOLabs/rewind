@@ -14,26 +14,10 @@
   background-size: 20px 20px;
 }
 
-/* back arrow */
-.back-button {
-  position: absolute;
-  top: 50%;
-  left: 3rem;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  z-index: 1001;
-}
-.back-button:hover {
-  opacity: 0.8;
-}
-
 /* tiny bar right below header */
 .current-ant-bar {
   position: fixed;
-  top: calc(var(--header-height) + 1rem);
+  top: calc(var(--header-height));
   left: 0;
   right: 0;
   height: var(--current-ant-height);
@@ -48,6 +32,22 @@
   z-index: 1001;
   border-top: 1px solid #222;
   border-bottom: 1px solid #222;
+}
+
+/* back arrow */
+.back-button {
+  position: absolute;
+  top: 50%;
+  left: 3rem;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  z-index: 1001;
+}
+.back-button:hover {
+  opacity: 0.8;
 }
 
 /* push the chain down beneath it */
@@ -134,7 +134,7 @@
 
 .legend {
   position: fixed;
-  top: calc(var(--header-height) + 8.4rem);
+  top: calc(var(--header-height) + 6.5rem);
   left: 1rem;
   background: rgba(0, 0, 0, 0.85);
   padding: 0.75rem 1rem;
