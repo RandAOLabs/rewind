@@ -51,15 +51,7 @@ export default defineConfig({
     })
   ],
   build: {
-    // Optimize chunks
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'analytics': ['react-ga4']
-        }
-      }
-    },
+
     // Enable minification
     minify: 'terser',
     terserOptions: {
@@ -71,7 +63,7 @@ export default defineConfig({
     // Generate sourcemaps for production
     sourcemap: true,
     // Optimize CSS
-    cssCodeSplit: true,
+    cssCodeSplit: false,
     // Enable asset optimization
     assetsInlineLimit: 4096,
     // Reduce chunk size warnings
