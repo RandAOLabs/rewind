@@ -10,6 +10,7 @@ export default defineConfig({
     viteSingleFile(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'inline',
       includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
       manifest: {
         name: 'AR.IO React App',
