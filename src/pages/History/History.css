@@ -35,7 +35,7 @@
 }
 
 /* back arrow */
-.back-button {
+.current-ant-bar .back-button {
   position: absolute;
   top: 50%;
   left: 3rem;
