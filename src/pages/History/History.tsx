@@ -8,6 +8,8 @@ interface HistoricalState {
   timestamp: string;
   txHash: string;
   action: string;
+  controller: string;   // who did it
+  legendKey: string;    // matches your legend dot classes
 }
 
 const dummyAntData = {
@@ -24,19 +26,56 @@ const dummyAntData = {
   logoTxId: 'hJ3kDfl98a7-AXY12bc34EfGhIjKlmNoPqRsTuVwXyZ',
   description: 'This is a dummy description for the ANT.',
 };
-
 const dummyHistoricalStates: HistoricalState[] = [
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'mTvrEG1iE7Jscnmm9tUpNjZWUX23mpYC4iBS38IKfzc', action: 'Purchased ANT' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: 'wGljtpe4tSsISgVuqXmg4uQYQrE60dtmb2Pup45pn3U', action: 'Added Undername' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'mM1OLVPVXWQyMC-M6NV6PwoAryYJuchx3QvnkGvrvLU', action: 'Renewed ANT' },
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'oVpt5ivH7ib1UwngQIJqsXAIG8-eZcL4QnJ6_hp2ZRI', action: 'Changed Page Content' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: '-Qa-AUcSv-DOlyXDNRrBgBsH9-Xu1ycn1v6LIkBOhHg', action: 'Renewed ANT' },
-  { timestamp: '2023-02-21 12:00 UTC', txHash: '6gke47oVpt5ivH7ib1UwngQIJqsXAIG8-eZcL4QnJ6_', action: 'Changed Page Content' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'Q97Ho_IVJOck4U2OeprYolFGgGoPUUVbEwaZcQR16Gc', action: 'Renewed ANT' },
-  { timestamp: '2023-01-01 12:00 UTC', txHash: 'Z-g2JcLBHGdqSec83psGLOW_4OxGXJxKPc8l9LZ2apQ', action: 'Added Undername' },
-  { timestamp: '2023-02-15 08:30 UTC', txHash: 'utEtBv4mWbvq28_x93NlcwjxaV21nBWb-SOrOXEFVu0', action: 'Changed Page Content' },
-  { timestamp: '2023-03-10 17:45 UTC', txHash: 'fu_BiQNqxdvwez3v_0Y0tktOI572UwsOlVmHY6oLK38', action: 'Removed Undername' },
+  {
+    timestamp: '2023-01-01 12:00 UTC',
+    txHash:    '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
+    action:    'Purchased ANT Name',
+    controller:'ttOZLNyBZokWYmAlNIDq',   // full ID, we’ll truncate
+    legendKey: 'ant-ownership-transfer',
+  },
+  {
+    timestamp: '2023-02-15 08:30 UTC',
+    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
+    action:    'Changed Page Contents',
+    controller:'ttOZLNyBZokWYmAlNIDq', 
+    legendKey: 'ant-content-change',
+  },
+  {
+    timestamp: '2023-03-10 17:45 UTC',
+    txHash:    'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
+    action:    'Renewed ANT Name',
+    controller:'ttOZLNyBZokWYmAlNIDq', 
+    legendKey: 'ant-renewal',
+  },
+  {
+    timestamp: '2023-04-15 08:30 UTC',
+    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
+    action:    'Added Undername',
+    controller:'ttOZLNyBZokWYmAlNIDq', 
+    legendKey: 'undername-creation',
+  },
+  {
+    timestamp: '2023-05-15 08:30 UTC',
+    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
+    action:    'Added Controller',
+    controller:'ttOZLNyBZokWYmAlNIDq', 
+    legendKey: 'ant-controller-addition',
+  },
+  {
+    timestamp: '2023-06-10 17:45 UTC',
+    txHash:    'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
+    action:    'Changed Undername Content',
+    controller:'C_3j4_d-GNK0jJrCK65OTkN0Iq6xK-YejtixDRevG7o', 
+    legendKey: 'undername-content-change',
+  },
 ];
+
+const truncate4 = (s: string) => s.slice(0, 4);
+const formatDate = (ts: string) =>
+  new Date(ts + ' UTC').toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
 
 // Helper to truncate to first 5 chars
 const truncate5 = (s: string) => s.slice(0, 5);
@@ -72,66 +111,70 @@ function CurrentAntBar({
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
-  
-  // only historical events now
+
   const timelineEvents = dummyHistoricalStates.map((st, i) => ({
     key: `hist-${i}`,
     content: (
       <div className="chain-card">
-        <h3>{st.action}</h3>
-        <p><strong>Time:</strong> {st.timestamp}</p>
-        <p>
-          <strong>Tx:</strong>{' '}
-          <a
-            href={`https://arweave.net/${st.txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="tx-link"
-          >
-            {st.txHash}
-          </a>
-        </p>
-      </div>
-    ),
+  <div className="chain-card-header">
+    {/* 1) Action first */}
+    <span className="action-text">{st.action}</span>
+
+    {/* 2) Then the truncated controller ID */}
+    <span className="controller">{truncate5(st.controller)}</span>
+
+    {/* 3) Finally the colored square */}
+    <span className={`legend-square ${st.legendKey}`}></span>
+  </div>
+
+  <hr />
+
+  <div className="chain-card-footer">
+    <span>Date:</span>
+    <span className="date">{formatDate(st.timestamp)} </span>
+    <span className="txid">
+      <span>&nbsp;</span>
+      <span> Hash: </span>
+      <span className="txid">
+        <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
+          {truncate5(st.txHash)}
+        </a>
+      </span>
+    </span>
+  </div>
+</div>
+    )
   }));
 
   return (
     <div className="history">
 
-{/* Floating Legend */}
-<div className="legend">
+      {/* Floating Legend */}
+      <div className="legend">
         <h4>Legend</h4>
         <div className="legend-section">
-          <div className="legend-title">Card Legend:</div>
+          <div className="legend-title">Event Legend:</div>
           <div className="legend-item">
-            <span className="dot text-change" /> Text Changes
+            <span className="dot ant-ownership-transfer" /> Ownership Transfer
           </div>
           <div className="legend-item">
-            <span className="dot address-change" /> Address Changes
+            <span className="dot ant-content-change" /> Content Change
           </div>
           <div className="legend-item">
-            <span className="dot resolver-changed" /> Resolver Changed
+            <span className="dot ant-renewal" /> Renewal
           </div>
           <div className="legend-item">
-            <span className="dot content-hash" /> ContentHash Changed
+            <span className="dot undername-creation" /> Undername Creation
           </div>
           <div className="legend-item">
-            <span className="dot multiple-changes" /> Multiple Changes
-          </div>
-        </div>
-        <div className="legend-section">
-          <div className="legend-title">Data Legend:</div>
-          <div className="legend-item">
-            <span className="dot added-records" /> Added Records
+            <span className="dot ant-controller-addition" /> Controller Addition
           </div>
           <div className="legend-item">
-            <span className="dot updated-records" /> Updated Records
-          </div>
-          <div className="legend-item">
-            <span className="dot removed-records" /> Removed Records
+            <span className="dot undername-content-change" /> Undername Content Change
           </div>
         </div>
       </div>
+
 
       {/* NEW: current-state, fixed beneath header */}
       <CurrentAntBar name={arnsname} onBack={() => navigate(-2)} />

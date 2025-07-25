@@ -104,14 +104,19 @@
 
 /* card styling */
 .chain-card {
-  margin-top: 0.5rem;
-  min-width: 200px;
-  background-color: #111;
-  border: 1px solid #222;
+  background: #111;
+  border:   1px solid #222;
   border-radius: 8px;
-  padding: 1rem;
-  color: #fff;
-  text-align: left;
+  padding: 0.75rem;
+  min-width: 200px;
+  color:   #fff;
+  display: flex;
+  flex-direction: column;
+}
+.chain-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 .chain-card h3 {
   margin-top: 0;
@@ -119,6 +124,76 @@
 .chain-card p {
   margin: 0.5rem 0;
   font-size: 0.95rem;
+}
+
+.legend-square {
+  position: absolute;
+  right: 1rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+
+
+/* ─── Card Header square colors ─────────────────────── */
+.legend-square.ant-ownership-transfer    { background: #FFD700; }  /* gold */
+.legend-square.ant-content-change        { background: #1E90FF; }  /* dodgerblue */
+.legend-square.ant-renewal               { background: #32CD32; }  /* limegreen */
+.legend-square.undername-creation        { background: #00CED1; }  /* darkturquoise */
+.legend-square.ant-controller-addition   { background: #C71585; }  /* mediumvioletred */
+.legend-square.undername-content-change  { background: #FFA500; }  /* orange */
+
+
+.legend-square.text-change      { background: orange; }
+.legend-square.address-change   { background: cyan; }
+.legend-square.resolver-changed { background: yellow; }
+.legend-square.content-hash     { background: magenta; }
+.legend-square.multiple-changes { background: purple; }
+.legend-square.added-records    { background: green; }
+.legend-square.updated-records  { background: blue; }
+.legend-square.removed-records  { background: red; }
+
+
+/* monospace, small for the truncated controller ID */
+.controller {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* bold the action text */
+.action-text {
+  font-weight: bold;
+  font-size: 0.7rem;
+}
+
+/* ─── Divider ────────────────────────────────────────── */
+.chain-card hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin:    0.5rem 0;
+}
+
+/* ─── Footer (date + txid) ───────────────────────────── */
+.chain-card-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+/* lighter date */
+.date {
+  color: #bbb;
+}
+
+/* clickable txid */
+.txid a {
+  color: #1e90ff;
+  text-decoration: underline;
+}
+.txid a:hover {
+  color: #63b3ed;
 }
 
 /* tx link styling */
@@ -174,6 +249,14 @@
   display: inline-block;
   margin-right: 0.5rem;
 }
+
+/* ─── Legend dot colors ────────────────────────────── */
+.dot.ant-ownership-transfer    { background: #FFD700; }
+.dot.ant-content-change        { background: #1E90FF; }
+.dot.ant-renewal               { background: #32CD32; }
+.dot.undername-creation        { background: #00CED1; }
+.dot.ant-controller-addition   { background: #C71585; }
+.dot.undername-content-change  { background: #FFA500; }
 
 /* Card Legend colors */
 .dot.text-change        { background: orange; }
