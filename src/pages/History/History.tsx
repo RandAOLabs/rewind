@@ -72,7 +72,7 @@ function CurrentAntBar({
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
-
+  
   // only historical events now
   const timelineEvents = dummyHistoricalStates.map((st, i) => ({
     key: `hist-${i}`,
