@@ -1,5 +1,5 @@
 // src/pages/History/History.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -77,75 +77,76 @@ export default function History() {
         // flatten the array into individual emissions
         switchMap((raw: IARNSEvent[]) => from(raw)),
         // for each event, do its async getters in parallel
-        mergeMap((e: IARNSEvent) => {
+        mergeMap( (e: IARNSEvent) => {
           let action: string,
               legendKey: string,
               actor$: Observable<string>,
               timestamp$: Observable<number>,
               txHash$: Observable<string>;
-
+          //console.log(e);
           switch (e.constructor.name) {
             case BuyNameEvent.name: {
               const ev = e as BuyNameEvent;
               action    = 'Purchased ANT Name';
               legendKey = 'ant-ownership-transfer';
-              actor$    = from(ev.getBuyer());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             case ReassignNameEvent.name: {
               const ev = e as ReassignNameEvent;
               action    = 'Reassigned ANT Name';
               legendKey = 'ant-ownership-transfer';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             case ReturnedNameEvent.name: {
               const ev = e as ReturnedNameEvent;
               action    = 'Returned ANT Name';
               legendKey = 'ant-ownership-transfer';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             case ExtendLeaseEvent.name: {
               const ev = e as ExtendLeaseEvent;
               action    = 'Renewed ANT Name';
               legendKey = 'ant-renewal';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             case IncreaseUndernameEvent.name: {
               const ev = e as IncreaseUndernameEvent;
               action    = 'Added undername';
               legendKey = 'undername-creation';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
+
               break;
             }
             case RecordEvent.name: {
               const ev = e as RecordEvent;
               action    = 'Changed page contents';
               legendKey = 'ant-content-change';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             case UpgradeNameEvent.name: {
               const ev = e as UpgradeNameEvent;
               action    = 'Upgraded ANT Name';
               legendKey = 'ant-content-change';
-              actor$    = from(ev.getEventMessageId());
+              actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = from(ev.getEventMessageId());
+              txHash$   = of(ev.getEventMessageId());
               break;
             }
             // fallback
@@ -153,9 +154,9 @@ export default function History() {
               console.warn('Unknown event:', e.constructor.name);
               action    = 'Unknown Event';
               legendKey = 'multiple-changes';
-              actor$    = from(Promise.resolve(''));
+              actor$    = of(e.getInitiator());
               timestamp$= of(e.getEventTimeStamp());
-              txHash$   = from(Promise.resolve(''));
+              txHash$   = of('');
             }
           }
 
