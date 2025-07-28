@@ -1,86 +1,43 @@
 // src/pages/History/History.tsx
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import {
+  ARIORewindService,
+
+  BuyNameEvent,
+  ARNameEvent,
+  ExtendLeaseEvent,
+  IncreaseUndernameEvent,
+  ReassignNameEvent,
+  RecordEvent,
+  ANTEvent,
+  UpgradeNameEvent,
+  ReturnedNameEvent,
+
+  IARNSEvent,
+} from 'ao-js-sdk';
+import { from, forkJoin, Observable } from 'rxjs';
+import { switchMap, mergeMap, map } from 'rxjs/operators';
 import './History.css';
 
-interface HistoricalState {
-  timestamp: string;
-  txHash: string;
-  action: string;
-  controller: string;   // who did it
-  legendKey: string;    // matches your legend dot classes
-}
-
+// (Optional) Data for your fixed bar at the top
 const dummyAntData = {
   leaseDuration: '3 years',
-  expiry: '2027-08-11',
-  processId: 'YWaDxx9CQwDBdp09klnYU5mNAxvu7oqS6YJ4oWr9T4Y',
-  targetId: '-ornXYCNRA3dhXcV3LMMcRx-NbWcjVKIvjO0Q9ciJqk',
-  controllers: [
-    'ttOZLNyBZokWYmAlNIDqngzYXj9sEIU22B0sBTJobWc',
-    'C_3j4_d-GNK0jJrCK65OTkN0Iq6xK-YejtixDRevG7o',
-  ],
-  owner: 'LTxNyUaVVm-lwR-Wa7Z4LXbz3TvW5btEm-qoD9VhGm4',
-  ttl: '3600s',
-  logoTxId: 'hJ3kDfl98a7-AXY12bc34EfGhIjKlmNoPqRsTuVwXyZ',
-  description: 'This is a dummy description for the ANT.',
+  expiry:        '2027-08-11',
 };
-const dummyHistoricalStates: HistoricalState[] = [
-  {
-    timestamp: '2023-01-01 12:00 UTC',
-    txHash:    '9LpDNTTzo9oHasWWloZm8GRVRa5-1AVBu_IjxCBC_vo',
-    action:    'Purchased ANT Name',
-    controller:'ttOZLNyBZokWYmAlNIDq',   // full ID, we’ll truncate
-    legendKey: 'ant-ownership-transfer',
-  },
-  {
-    timestamp: '2023-02-15 08:30 UTC',
-    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action:    'Changed Page Contents',
-    controller:'ttOZLNyBZokWYmAlNIDq', 
-    legendKey: 'ant-content-change',
-  },
-  {
-    timestamp: '2023-03-10 17:45 UTC',
-    txHash:    'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action:    'Renewed ANT Name',
-    controller:'ttOZLNyBZokWYmAlNIDq', 
-    legendKey: 'ant-renewal',
-  },
-  {
-    timestamp: '2023-04-15 08:30 UTC',
-    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action:    'Added Undername',
-    controller:'ttOZLNyBZokWYmAlNIDq', 
-    legendKey: 'undername-creation',
-  },
-  {
-    timestamp: '2023-05-15 08:30 UTC',
-    txHash:    'AOydg-WqezTa2F0wjE9xdmSdjQVBwMQGB4OjQl-KB4o',
-    action:    'Added Controller',
-    controller:'ttOZLNyBZokWYmAlNIDq', 
-    legendKey: 'ant-controller-addition',
-  },
-  {
-    timestamp: '2023-06-10 17:45 UTC',
-    txHash:    'mLzoyxWrL1afrHHTMmQLoVzT0qgTsK_ho2Tk4Mc9o2o',
-    action:    'Changed Undername Content',
-    controller:'C_3j4_d-GNK0jJrCK65OTkN0Iq6xK-YejtixDRevG7o', 
-    legendKey: 'undername-content-change',
-  },
-];
 
-const truncate4 = (s: string) => s.slice(0, 4);
-const formatDate = (ts: string) =>
-  new Date(ts + ' UTC').toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric'
-  });
+// The shape we render into cards
+interface UIEvent {
+  action:     string;
+  actor:      string;
+  legendKey:  string;
+  timestamp:  number;
+  txHash:     string;
+}
 
-// Helper to truncate to first 5 chars
-const truncate5 = (s: string) => s.slice(0, 5);
-
-// Tiny bar right under header, now with back‑button inside it
+// Tiny fixed bar under the header
 function CurrentAntBar({
   name,
   onBack,
@@ -91,19 +48,11 @@ function CurrentAntBar({
   return (
     <div className="current-ant-bar">
       <button className="back-button" onClick={onBack} aria-label="Go back">
-        <AiOutlineArrowLeft size={27} />
+        <AiOutlineArrowLeft size={20} />
       </button>
-
       <span>ANT Name: <code>{name}</code></span>
       <span>Expiry: {dummyAntData.expiry}</span>
       <span>Lease: {dummyAntData.leaseDuration}</span>
-      <span>Process ID: <code>{truncate5(dummyAntData.processId)}...</code></span>
-      <span>Target ID: <code>{truncate5(dummyAntData.targetId)}...</code></span>
-      <span>
-        Controllers: {dummyAntData.controllers.map(c => (truncate5(c)+' . . .')).join(', ')}
-      </span>
-      <span>Owner: <code>{truncate5(dummyAntData.owner)}...</code></span>
-      <span>TTL: {dummyAntData.ttl}</span>
     </div>
   );
 }
@@ -111,63 +60,190 @@ function CurrentAntBar({
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
+  const [events, setEvents]   = useState<UIEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
-  const timelineEvents = dummyHistoricalStates.map((st, i) => ({
-    key: `hist-${i}`,
+  useEffect(() => {
+    // reset on new name
+    setEvents([]);
+    setLoading(true);
+    setError(null);
+
+    const service = ARIORewindService.autoConfiguration();
+    const sub = service
+      .getEventHistory$(arnsname)          // Observable<IARNSEvent[]>
+      .pipe(
+        // flatten the array into individual emissions
+        switchMap((raw: IARNSEvent[]) => from(raw)),
+        // for each event, do its async getters in parallel
+        mergeMap((e: IARNSEvent) => {
+          let action: string,
+              legendKey: string,
+              actor$: Observable<string>,
+              timestamp$: Observable<number>,
+              txHash$: Observable<string>;
+
+          switch (e.constructor.name) {
+            case BuyNameEvent.name: {
+              const ev = e as BuyNameEvent;
+              action    = 'Purchased ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getBuyer());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case ReassignNameEvent.name: {
+              const ev = e as ReassignNameEvent;
+              action    = 'Reassigned ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case ReturnedNameEvent.name: {
+              const ev = e as ReturnedNameEvent;
+              action    = 'Returned ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case ExtendLeaseEvent.name: {
+              const ev = e as ExtendLeaseEvent;
+              action    = 'Renewed ANT Name';
+              legendKey = 'ant-renewal';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case IncreaseUndernameEvent.name: {
+              const ev = e as IncreaseUndernameEvent;
+              action    = 'Added undername';
+              legendKey = 'undername-creation';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case RecordEvent.name: {
+              const ev = e as RecordEvent;
+              action    = 'Changed page contents';
+              legendKey = 'ant-content-change';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case UpgradeNameEvent.name: {
+              const ev = e as UpgradeNameEvent;
+              action    = 'Upgraded ANT Name';
+              legendKey = 'ant-content-change';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            // fallback
+            default: {
+              console.warn('Unknown event:', e.constructor.name);
+              action    = 'Unknown Event';
+              legendKey = 'multiple-changes';
+              actor$    = from(Promise.resolve(''));
+              timestamp$= from(Promise.resolve(Date.now()));
+              txHash$   = from(Promise.resolve(''));
+            }
+          }
+
+          // wait for the three async getters, then emit a UIEvent
+          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$ }).pipe(
+            map(({ actor, timestamp, txHash }) => ({
+              action,
+              actor,
+              legendKey,
+              timestamp,
+              txHash,
+            } as UIEvent))
+          );
+        })
+      )
+      .subscribe({
+        next: (uiEvt: UIEvent) => {
+          // append each as it arrives
+          setEvents(prev => [...prev, uiEvt]);
+        },
+        error: err => {
+          console.error(err);
+          setError(err.message || 'Failed to load history');
+          setLoading(false);
+        },
+        complete: () => {
+          setLoading(false);
+        },
+      });
+
+    return () => sub.unsubscribe();
+  }, [arnsname]);
+
+  if (loading) return <div className="loading">Loading history…</div>;
+  if (error)   return <div className="error">{error}</div>;
+
+  // Build the timeline cards
+  const timelineEvents = events.map((st, i) => ({
+    key: `${st.txHash}-${i}`,
     content: (
       <div className="chain-card">
-  <div className="chain-card-header">
-    {/* 1) Action first */}
-    <span className="action-text">{st.action}</span>
-
-    {/* 2) Then the truncated controller ID */}
-    <span className="controller">{truncate5(st.controller)}</span>
-
-    {/* 3) Finally the colored square */}
-    <span className={`legend-square ${st.legendKey}`}></span>
-  </div>
-
-  <hr />
-
-  <div className="chain-card-footer">
-    <span>Date:</span>
-    <span className="date">{formatDate(st.timestamp)} </span>
-    <span className="txid">
-      <span>&nbsp;</span>
-      <span> Hash: </span>
-      <span className="txid">
-        <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
-          {truncate5(st.txHash)}
-        </a>
-      </span>
-    </span>
-  </div>
-</div>
-    )
+        <div className="chain-card-header">
+          <span className="action-text">{st.action}</span>
+          <span className="actor">{st.actor.slice(0, 4)}</span>
+          <span className={`legend-square ${st.legendKey}`}></span>
+        </div>
+        <hr />
+        <div className="chain-card-footer">
+          <span className="date">
+            {new Date(st.timestamp).toLocaleDateString(undefined, {
+              year: 'numeric', month: 'short', day: 'numeric'
+            })}
+          </span>
+          <span className="txid">
+            <a
+              href={`https://arweave.net/${st.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {st.txHash}
+            </a>
+          </span>
+        </div>
+      </div>
+    ),
   }));
 
   return (
     <div className="history">
-
-      {/* Floating Legend */}
+      {/* Legend */}
       <div className="legend">
         <h4>Legend</h4>
         <div className="legend-section">
           <div className="legend-title">Event Legend:</div>
           <div className="legend-item">
-            <span className="dot ant-ownership-transfer" /> Ownership Transfer
+            <span className="dot ant-ownership-transfer" /> ANT Ownership Transfer
           </div>
           <div className="legend-item">
-            <span className="dot ant-content-change" /> Content Change
+            <span className="dot ant-content-change" /> ANT Content Change
           </div>
           <div className="legend-item">
-            <span className="dot ant-renewal" /> Renewal
+            <span className="dot ant-renewal" /> ANT Renewal
           </div>
           <div className="legend-item">
             <span className="dot undername-creation" /> Undername Creation
           </div>
           <div className="legend-item">
-            <span className="dot ant-controller-addition" /> Controller Addition
+            <span className="dot ant-controller-addition" /> ANT Controller Addition
           </div>
           <div className="legend-item">
             <span className="dot undername-content-change" /> Undername Content Change
@@ -175,11 +251,10 @@ export default function History() {
         </div>
       </div>
 
-
-      {/* NEW: current-state, fixed beneath header */}
+      {/* Fixed ANT Bar */}
       <CurrentAntBar name={arnsname} onBack={() => navigate(-2)} />
 
-      {/* chain, now only historical events */}
+      {/* Draggable chain */}
       <div className="chain-wrapper">
         <TransformWrapper
           initialScale={1}
@@ -192,7 +267,6 @@ export default function History() {
           centerOnInit={false}
           initialPositionX={200}
           initialPositionY={125}
-
         >
           {({ zoomIn, zoomOut, resetTransform }) => (
             <>
@@ -201,14 +275,17 @@ export default function History() {
                 <button onClick={() => zoomOut()}>–</button>
                 <button onClick={() => resetTransform()}>⟳</button>
               </div>
-              <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ width: '100%', height: '50%' }}>
-                  <div className="chain-container">
-                    {timelineEvents.map(ev => (
-                      <div key={ev.key} className="chain-item">
-                        {ev.content}
-                      </div>
-                    ))}
-                  </div>
+              <TransformComponent
+                wrapperStyle={{ width: '100%', height: '100%', position: 'relative' }}
+                contentStyle={{ width: '100%', height: '100%' }}
+              >
+                <div className="chain-container">
+                  {timelineEvents.map(ev => (
+                    <div key={ev.key} className="chain-item">
+                      {ev.content}
+                    </div>
+                  ))}
+                </div>
               </TransformComponent>
             </>
           )}
