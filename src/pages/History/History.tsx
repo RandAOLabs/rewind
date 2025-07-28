@@ -18,7 +18,7 @@ import {
 
   IARNSEvent,
 } from 'ao-js-sdk';
-import { from, forkJoin, Observable } from 'rxjs';
+import { from, forkJoin, Observable, of } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
 import './History.css';
 
@@ -90,7 +90,7 @@ export default function History() {
               action    = 'Purchased ANT Name';
               legendKey = 'ant-ownership-transfer';
               actor$    = from(ev.getBuyer());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -99,7 +99,7 @@ export default function History() {
               action    = 'Reassigned ANT Name';
               legendKey = 'ant-ownership-transfer';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -108,7 +108,7 @@ export default function History() {
               action    = 'Returned ANT Name';
               legendKey = 'ant-ownership-transfer';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -117,7 +117,7 @@ export default function History() {
               action    = 'Renewed ANT Name';
               legendKey = 'ant-renewal';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -126,7 +126,7 @@ export default function History() {
               action    = 'Added undername';
               legendKey = 'undername-creation';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -135,7 +135,7 @@ export default function History() {
               action    = 'Changed page contents';
               legendKey = 'ant-content-change';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -144,7 +144,7 @@ export default function History() {
               action    = 'Upgraded ANT Name';
               legendKey = 'ant-content-change';
               actor$    = from(ev.getEventMessageId());
-              timestamp$= from(ev.getStartTime());
+              timestamp$= of(ev.getEventTimeStamp());
               txHash$   = from(ev.getEventMessageId());
               break;
             }
@@ -154,7 +154,7 @@ export default function History() {
               action    = 'Unknown Event';
               legendKey = 'multiple-changes';
               actor$    = from(Promise.resolve(''));
-              timestamp$= from(Promise.resolve(Date.now()));
+              timestamp$= of(e.getEventTimeStamp());
               txHash$   = from(Promise.resolve(''));
             }
           }
@@ -205,7 +205,7 @@ export default function History() {
         <hr />
         <div className="chain-card-footer">
           <span className="date">
-            {new Date(st.timestamp).toLocaleDateString(undefined, {
+            {new Date(st.timestamp*1000).toLocaleDateString(undefined, {
               year: 'numeric', month: 'short', day: 'numeric'
             })}
           </span>
