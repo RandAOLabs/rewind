@@ -16,28 +16,22 @@ import {
   UpgradeNameEvent,
   ReturnedNameEvent,
 
-
   IARNSEvent,
-  IBuyNameEvent,
-  IExtendLeaseEvent,
-  IIncreaseUndernameEvent,
-  IReassignNameEvent,
-  IRecordEvent,
-  IANTEvent,
-  ISetRecordEvent,
 } from 'ao-js-sdk';
+import { from, forkJoin, Observable } from 'rxjs';
+import { switchMap, mergeMap, map } from 'rxjs/operators';
 import './History.css';
 
 // (Optional) Data for your fixed bar at the top
 const dummyAntData = {
   leaseDuration: '3 years',
-  expiry: '2027-08-11',
+  expiry:        '2027-08-11',
 };
 
 // The shape we render into cards
 interface UIEvent {
   action:     string;
-  actor: string;
+  actor:      string;
   legendKey:  string;
   timestamp:  number;
   txHash:     string;
@@ -71,70 +65,126 @@ export default function History() {
   const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
+    // reset on new name
+    setEvents([]);
     setLoading(true);
     setError(null);
 
     const service = ARIORewindService.autoConfiguration();
-    const sub = service.getEventHistory$(arnsname).subscribe({
-      next: (raw: IARNSEvent[]) => {
-        console.log(raw);
-        const ui = raw.map(async (e): Promise<UIEvent> => {
+    const sub = service
+      .getEventHistory$(arnsname)          // Observable<IARNSEvent[]>
+      .pipe(
+        // flatten the array into individual emissions
+        switchMap((raw: IARNSEvent[]) => from(raw)),
+        // for each event, do its async getters in parallel
+        mergeMap((e: IARNSEvent) => {
+          let action: string,
+              legendKey: string,
+              actor$: Observable<string>,
+              timestamp$: Observable<number>,
+              txHash$: Observable<string>;
+
           switch (e.constructor.name) {
-            
-            // ARNAME EVENTS
             case BuyNameEvent.name: {
               const ev = e as BuyNameEvent;
-              return {
-                action:     'Purchased ANT Name',
-                actor:      await ev.getBuyer(),
-                legendKey:  'ant-ownership-transfer',
-                timestamp:  await ev.getStartTime(),
-                txHash:     await ev.getEventMessageId(),
-              };
+              action    = 'Purchased ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getBuyer());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
             }
-
             case ReassignNameEvent.name: {
               const ev = e as ReassignNameEvent;
-              return {
-                action:     'Reassigned ANT Name',
-                actor:      'await ev.getBuyer()',
-                legendKey:  'ant-ownership-transfer',
-                timestamp:  await ev.getStartTime(),
-                txHash:     await ev.getEventMessageId(),
-              };
+              action    = 'Reassigned ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case ReturnedNameEvent.name: {
+              const ev = e as ReturnedNameEvent;
+              action    = 'Returned ANT Name';
+              legendKey = 'ant-ownership-transfer';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case ExtendLeaseEvent.name: {
+              const ev = e as ExtendLeaseEvent;
+              action    = 'Renewed ANT Name';
+              legendKey = 'ant-renewal';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
             }
             case IncreaseUndernameEvent.name: {
               const ev = e as IncreaseUndernameEvent;
-              return {
-                action:     'Added undername',
-                actor:      'await ev.getBuyer()',
-                legendKey:  'undername-creation',
-                timestamp:  await ev.getStartTime(),
-                txHash:     await ev.getEventMessageId(),
-              };
+              action    = 'Added undername';
+              legendKey = 'undername-creation';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
             }
-        
-            default:
-              console.warn('Unknown event type:', e.constructor.name);
-              return {
-                action:     'Unknown Event',
-                actor: '',
-                legendKey:  'multiple-changes',
-                timestamp:  await (e as any).getStartTime?.() || '',
-                txHash:     await (e as any).getEventMessageId?.()       || '',
-              };
+            case RecordEvent.name: {
+              const ev = e as RecordEvent;
+              action    = 'Changed page contents';
+              legendKey = 'ant-content-change';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            case UpgradeNameEvent.name: {
+              const ev = e as UpgradeNameEvent;
+              action    = 'Upgraded ANT Name';
+              legendKey = 'ant-content-change';
+              actor$    = from(ev.getEventMessageId());
+              timestamp$= from(ev.getStartTime());
+              txHash$   = from(ev.getEventMessageId());
+              break;
+            }
+            // fallback
+            default: {
+              console.warn('Unknown event:', e.constructor.name);
+              action    = 'Unknown Event';
+              legendKey = 'multiple-changes';
+              actor$    = from(Promise.resolve(''));
+              timestamp$= from(Promise.resolve(Date.now()));
+              txHash$   = from(Promise.resolve(''));
+            }
           }
-        });
 
-        setEvents(ui);
-        setLoading(false);
-      },
-      error: err => {
-        console.error(err);
-        setError(err.message || 'Failed to load history');
-        setLoading(false);
-      },
-    });
+          // wait for the three async getters, then emit a UIEvent
+          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$ }).pipe(
+            map(({ actor, timestamp, txHash }) => ({
+              action,
+              actor,
+              legendKey,
+              timestamp,
+              txHash,
+            } as UIEvent))
+          );
+        })
+      )
+      .subscribe({
+        next: (uiEvt: UIEvent) => {
+          // append each as it arrives
+          setEvents(prev => [...prev, uiEvt]);
+        },
+        error: err => {
+          console.error(err);
+          setError(err.message || 'Failed to load history');
+          setLoading(false);
+        },
+        complete: () => {
+          setLoading(false);
+        },
+      });
 
     return () => sub.unsubscribe();
   }, [arnsname]);
@@ -175,7 +225,6 @@ export default function History() {
 
   return (
     <div className="history">
-
       {/* Legend */}
       <div className="legend">
         <h4>Legend</h4>
