@@ -5,6 +5,18 @@ import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import {
   ARIORewindService,
+
+  BuyNameEvent,
+  ARNameEvent,
+  ExtendLeaseEvent,
+  IncreaseUndernameEvent,
+  ReassignNameEvent,
+  RecordEvent,
+  ANTEvent,
+  UpgradeNameEvent,
+  ReturnedNameEvent,
+
+
   IARNSEvent,
   IBuyNameEvent,
   IExtendLeaseEvent,
@@ -12,6 +24,7 @@ import {
   IReassignNameEvent,
   IRecordEvent,
   IANTEvent,
+  ISetRecordEvent,
 } from 'ao-js-sdk';
 import './History.css';
 
@@ -24,9 +37,9 @@ const dummyAntData = {
 // The shape we render into cards
 interface UIEvent {
   action:     string;
-  controller: string;
+  actor: string;
   legendKey:  string;
-  timestamp:  string;
+  timestamp:  number;
   txHash:     string;
 }
 
@@ -65,85 +78,51 @@ export default function History() {
     const sub = service.getEventHistory$(arnsname).subscribe({
       next: (raw: IARNSEvent[]) => {
         console.log(raw);
-        const ui = raw.map((e): UIEvent => {
-          switch (true) {
-            // PURCHASE (ANT Ownership Transfer)
-            case 'getPurchasedProcessId' in e: {
-              const be = e as unknown as IBuyNameEvent;
+        const ui = raw.map(async (e): Promise<UIEvent> => {
+          switch (e.constructor.name) {
+            
+            // ARNAME EVENTS
+            case BuyNameEvent.name: {
+              const ev = e as BuyNameEvent;
               return {
                 action:     'Purchased ANT Name',
-                controller: 'be.getController()',
+                actor:      await ev.getBuyer(),
                 legendKey:  'ant-ownership-transfer',
-                timestamp:  'be.getTimestamp()',
-                txHash:     'be.getTxId()',
+                timestamp:  await ev.getStartTime(),
+                txHash:     await ev.getEventMessageId(),
               };
             }
-            // CONTENT CHANGE (Page / Undername)
-            case 'getContentHash' in e: {
-              const cc = e as unknown as IRecordEvent;
+
+            case ReassignNameEvent.name: {
+              const ev = e as ReassignNameEvent;
               return {
-                action:     'Changed page contents',
-                controller: 'cc.getController()',
-                legendKey:  'ant-content-change',
-                timestamp:  'cc.getTimestamp()',
-                txHash:     'cc.getTxId()',
+                action:     'Reassigned ANT Name',
+                actor:      'await ev.getBuyer()',
+                legendKey:  'ant-ownership-transfer',
+                timestamp:  await ev.getStartTime(),
+                txHash:     await ev.getEventMessageId(),
               };
             }
-            // RENEWAL
-            case 'getNewExpiry' in e: {
-              const re = e as unknown as IExtendLeaseEvent;
-              return {
-                action:     'Renewed ANT Name',
-                controller: 're.getController()',
-                legendKey:  'ant-renewal',
-                timestamp:  're.getTimestamp()',
-                txHash:     're.getTxId()',
-              };
-            }
-            // UNDERNAME CREATION
-            case 'getUndername' in e: {
-              const uc = e as unknown as IIncreaseUndernameEvent;
+            case IncreaseUndernameEvent.name: {
+              const ev = e as IncreaseUndernameEvent;
               return {
                 action:     'Added undername',
-                controller: 'uc.getController()',
+                actor:      'await ev.getBuyer()',
                 legendKey:  'undername-creation',
-                timestamp:  'uc.getTimestamp()',
-                txHash:     'uc.getTxId()',
+                timestamp:  await ev.getStartTime(),
+                txHash:     await ev.getEventMessageId(),
               };
             }
-            // CONTROLLER ADDITION
-            case 'getReassignedProcessId' in e: {
-              const ca = e as unknown as IReassignNameEvent;
-              return {
-                action:     'Reassigned Name Event',
-                controller: 'ca.getController()',
-                legendKey:  'ant-controller-addition',
-                timestamp:  'ca.getTimestamp()',
-                txHash:     'ca.getTxId()',
-              };
-            }
-            // UNDERNAME CONTENT CHANGE
-            case 'getNewContentHash' in e: {
-              const uc = e as unknown as IANTEvent;
-              return {
-                action:     'Changed Undername Content',
-                controller: 'uc.getController()',
-                legendKey:  'undername-content-change',
-                timestamp:  'uc.getTimestamp()',
-                txHash:     'uc.getTxId()',
-              };
-            }
-            // Fallback
-            default: {
-              console.warn('Unknown event type, falling back:', e);
+        
+            default:
+              console.warn('Unknown event type:', e.constructor.name);
               return {
                 action:     'Unknown Event',
-                controller: '',
+                actor: '',
                 legendKey:  'multiple-changes',
-                timestamp:  (e as any).getTimestamp?.() || '',
-                txHash:     (e as any).getTxId?.()       || '',
+                timestamp:  await (e as any).getStartTime?.() || '',
+                txHash:     await (e as any).getEventMessageId?.()       || '',
               };
-            }
           }
         });
 
@@ -170,13 +149,13 @@ export default function History() {
       <div className="chain-card">
         <div className="chain-card-header">
           <span className="action-text">{st.action}</span>
-          <span className="controller">{st.controller.slice(0, 4)}</span>
+          <span className="actor">{st.actor.slice(0, 4)}</span>
           <span className={`legend-square ${st.legendKey}`}></span>
         </div>
         <hr />
         <div className="chain-card-footer">
           <span className="date">
-            {new Date(st.timestamp + ' UTC').toLocaleDateString(undefined, {
+            {new Date(st.timestamp).toLocaleDateString(undefined, {
               year: 'numeric', month: 'short', day: 'numeric'
             })}
           </span>
