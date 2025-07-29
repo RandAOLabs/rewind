@@ -5,17 +5,13 @@ import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import {
   ARIORewindService,
-
   BuyNameEvent,
-  ARNameEvent,
   ExtendLeaseEvent,
   IncreaseUndernameEvent,
   ReassignNameEvent,
   RecordEvent,
-  ANTEvent,
   UpgradeNameEvent,
   ReturnedNameEvent,
-
   IARNSEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, Observable, of } from 'rxjs';
@@ -28,6 +24,18 @@ const dummyAntData = {
   expiry:        '2027-08-11',
 };
 
+// in History.tsx
+interface ARNameDetail {
+  name: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  type: string;
+  processId: string;
+  controllers: string[];
+  owner: string;
+  ttlSeconds: number;
+}
+
 // The shape we render into cards
 interface UIEvent {
   action:     string;
@@ -37,22 +45,50 @@ interface UIEvent {
   txHash:     string;
 }
 
-// Tiny fixed bar under the header
+
+interface CurrentAntBarProps {
+  name: string;
+  expiryTs: number;
+  leaseDuration: string;
+  processId: string;
+  controllers: string[];
+  owner: string;
+  ttlSeconds: number;
+  onBack: () => void;
+}
+
 function CurrentAntBar({
   name,
+  expiryTs,
+  leaseDuration,
+  processId,
+  controllers,
+  owner,
+  ttlSeconds,
   onBack,
-}: {
-  name: string;
-  onBack: () => void;
-}) {
+}: CurrentAntBarProps) {
   return (
     <div className="current-ant-bar">
       <button className="back-button" onClick={onBack} aria-label="Go back">
         <AiOutlineArrowLeft size={20} />
       </button>
-      <span>ANT Name: <code>{name}</code></span>
-      <span>Expiry: {dummyAntData.expiry}</span>
-      <span>Lease: {dummyAntData.leaseDuration}</span>
+      <span>Name: <code>{name}</code></span>
+      <span>
+        Expiry: {new Date(expiryTs).toLocaleDateString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric'
+        })}
+      </span>
+      <span>Lease: {leaseDuration}</span>
+      <span>
+        Process ID: <code>{processId.slice(0,5)}...</code>
+      </span>
+      <span>
+        Controllers: {controllers.map(c => c.slice(0,5) + '...').join(', ')}
+      </span>
+      <span>
+        Owner: <code>{owner.slice(0,5)}...</code>
+      </span>
+      <span>TTL: {ttlSeconds}s</span>
     </div>
   );
 }
@@ -63,6 +99,30 @@ export default function History() {
   const [events, setEvents]   = useState<UIEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+
+  // 🆕 state for ANT detail
+  const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
+  const [antLoading, setAntLoading]   = useState(true);
+  const [antError, setAntError]       = useState<string | null>(null);
+
+  useEffect(() => {
+    setAntLoading(true);
+    setAntError(null);
+    
+    const service = ARIORewindService.autoConfiguration();
+    service
+      .getAntDetail(arnsname)
+      .then(detail => {
+        setAntDetail(detail);
+      })
+      .catch(err => {
+        console.error(err);
+        setAntError(err.message || 'Failed to load ANT details');
+      })
+      .finally(() => {
+        setAntLoading(false);
+      });
+  }, [arnsname]);
 
   useEffect(() => {
     // reset on new name
@@ -253,7 +313,23 @@ export default function History() {
       </div>
 
       {/* Fixed ANT Bar */}
-      <CurrentAntBar name={arnsname} onBack={() => navigate(-2)} />
+      {antLoading && <div className="loading">Loading ANT details…</div>}
+      {antError   && <div className="error">{antError}</div>}
+      {antDetail  && (
+        <CurrentAntBar
+          name={antDetail.name}
+          expiryTs={antDetail.endTimestamp}
+          leaseDuration={antDetail.type === 'lease' 
+            ? `${Math.floor((antDetail.endTimestamp - antDetail.startTimestamp)/(60*60*24*365))} years`
+            : antDetail.type
+          }
+          processId={antDetail.processId}
+          controllers={antDetail.controllers}
+          owner={antDetail.owner}
+          ttlSeconds={antDetail.ttlSeconds}
+          onBack={() => navigate(-2)}
+        />
+      )}
 
       {/* Draggable chain */}
       <div className="chain-wrapper">
