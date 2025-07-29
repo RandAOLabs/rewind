@@ -1,5 +1,5 @@
 // src/pages/History/History.tsx
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -14,7 +14,7 @@ import {
   ReturnedNameEvent,
   IARNSEvent,
 } from 'ao-js-sdk';
-import { from, forkJoin, Observable, of } from 'rxjs';
+import { from, forkJoin, of, Observable } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
 import './History.css';
 
@@ -44,7 +44,6 @@ interface UIEvent {
   timestamp:  number;
   txHash:     string;
 }
-
 
 interface CurrentAntBarProps {
   name: string;
@@ -93,18 +92,43 @@ function CurrentAntBar({
   );
 }
 
+type DetailedCardProps = {
+  event: UIEvent;
+  onClose: () => void;
+};
+
+// ─── DetailedCard pop‑up ─────────────────
+function DetailedCard({ event, onClose }: DetailedCardProps) {
+  return (
+    <div className="detailed-card">
+      <button className="close-btn" onClick={onClose}>×</button>
+      <h3>{event.action}</h3>
+      <p><strong>Actor:</strong> {event.actor}</p>
+      <p><strong>Date:</strong> {new Date(event.timestamp * 1000).toLocaleString()}</p>
+      <p><strong>Tx Hash:</strong> {event.txHash}</p>
+      <p><strong>Legend Key:</strong> {event.legendKey}</p>
+    </div>
+  );
+}
+
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
-  const [events, setEvents]   = useState<UIEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
 
-  // 🆕 state for ANT detail
+  const [events, setEvents]       = useState<UIEvent[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+
+  // 🆕 selection state
+  const [selectedEvent, setSelectedEvent] = useState<UIEvent | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  // ANT detail state (unchanged)
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
+  // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
     setAntError(null);
@@ -112,38 +136,29 @@ export default function History() {
     const service = ARIORewindService.autoConfiguration();
     service
       .getAntDetail(arnsname)
-      .then(detail => {
-        setAntDetail(detail);
-      })
-      .catch(err => {
-        console.error(err);
-        setAntError(err.message || 'Failed to load ANT details');
-      })
-      .finally(() => {
-        setAntLoading(false);
-      });
+      .then(detail => setAntDetail(detail))
+      .catch(err => setAntError(err.message || 'Failed to load ANT details'))
+      .finally(() => setAntLoading(false));
   }, [arnsname]);
 
+  // fetch & stream history events (unchanged)
   useEffect(() => {
-    // reset on new name
     setEvents([]);
     setLoading(true);
     setError(null);
+    setSelectedEvent(null);
 
     const service = ARIORewindService.autoConfiguration();
     const sub = service
-      .getEventHistory$(arnsname)          // Observable<IARNSEvent[]>
+      .getEventHistory$(arnsname)
       .pipe(
-        // flatten the array into individual emissions
         switchMap((raw: IARNSEvent[]) => from(raw)),
-        // for each event, do its async getters in parallel
-        mergeMap( (e: IARNSEvent) => {
-          let action: string,
-              legendKey: string,
-              actor$: Observable<string>,
-              timestamp$: Observable<number>,
-              txHash$: Observable<string>;
-          //console.log(e);
+        mergeMap((e: IARNSEvent) => {
+          let action: string, legendKey: string;
+          let actor$: Observable<string> = of('');
+          let timestamp$: Observable<number> = of(Date.now());
+          let txHash$: Observable<string> = of('');
+
           switch (e.constructor.name) {
             case BuyNameEvent.name: {
               const ev = e as BuyNameEvent;
@@ -188,7 +203,6 @@ export default function History() {
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
-
               break;
             }
             case RecordEvent.name: {
@@ -209,7 +223,6 @@ export default function History() {
               txHash$   = of(ev.getEventMessageId());
               break;
             }
-            // fallback
             default: {
               console.warn('Unknown event:', e.constructor.name);
               action    = 'Unknown Event';
@@ -220,44 +233,53 @@ export default function History() {
             }
           }
 
-          // wait for the three async getters, then emit a UIEvent
           return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$ }).pipe(
-            map(({ actor, timestamp, txHash }) => ({
-              action,
-              actor,
-              legendKey,
-              timestamp,
-              txHash,
-            } as UIEvent))
+            map(({ actor, timestamp, txHash }) => ({ action, actor, legendKey, timestamp, txHash } as UIEvent))
           );
         })
       )
       .subscribe({
-        next: (uiEvt: UIEvent) => {
-          // append each as it arrives
-          setEvents(prev => [...prev, uiEvt]);
-        },
+        next: (uiEvt: UIEvent) => setEvents(prev => [...prev, uiEvt]),
         error: err => {
           console.error(err);
           setError(err.message || 'Failed to load history');
           setLoading(false);
         },
-        complete: () => {
-          setLoading(false);
-        },
+        complete: () => setLoading(false),
       });
 
     return () => sub.unsubscribe();
   }, [arnsname]);
 
+  useEffect(() => {
+    if (!selectedEvent) return;  // only when detail is open
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        detailRef.current &&
+        !detailRef.current.contains(e.target as Node)
+      ) {
+        setSelectedEvent(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [selectedEvent]);
+
   if (loading) return <div className="loading">Loading history…</div>;
   if (error)   return <div className="error">{error}</div>;
 
-  // Build the timeline cards
+  // Build the timeline cards & make them clickable
   const timelineEvents = events.map((st, i) => ({
     key: `${st.txHash}-${i}`,
     content: (
-      <div className="chain-card">
+      <div
+        className="chain-card clickable"
+        onClick={() => setSelectedEvent(st)}
+      >
         <div className="chain-card-header">
           <span className="action-text">{st.action}</span>
           <span className="actor">{st.actor.slice(0, 4)}</span>
@@ -266,16 +288,12 @@ export default function History() {
         <hr />
         <div className="chain-card-footer">
           <span className="date">
-            {new Date(st.timestamp*1000).toLocaleDateString(undefined, {
+            {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
               year: 'numeric', month: 'short', day: 'numeric'
             })}
           </span>
           <span className="txid">
-            <a
-              href={`https://arweave.net/${st.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
               {st.txHash}
             </a>
           </span>
@@ -368,6 +386,16 @@ export default function History() {
           )}
         </TransformWrapper>
       </div>
+
+      {/* 🆕 Detail pop‑up */}
+      {selectedEvent && (
+        <div ref={detailRef}>
+          <DetailedCard
+            event={selectedEvent}
+            onClose={() => setSelectedEvent(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
