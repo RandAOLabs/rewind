@@ -79,7 +79,7 @@ export default defineConfig({
   },
   // Optimize dev server
   server: {
-    open: true,
+    open: false,
     cors: true,
     hmr: {
       overlay: true

@@ -13,47 +13,40 @@ import {
   UpgradeNameEvent,
   ReturnedNameEvent,
   IARNSEvent,
+  AntRecord,
+  ARNameDetail,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
 import './History.css';
+import EventDetails from './EventDetails';
 
-// (Optional) Data for your fixed bar at the top
-const dummyAntData = {
-  leaseDuration: '3 years',
-  expiry:        '2027-08-11',
-};
 
-// in History.tsx
-interface ARNameDetail {
-  name: string;
-  startTimestamp: number;
-  endTimestamp: number;
-  type: string;
-  processId: string;
-  controllers: string[];
-  owner: string;
-  ttlSeconds: number;
-}
 
 // The shape we render into cards
-interface UIEvent {
+export interface TimelineEvent {
   action:     string;
   actor:      string;
   legendKey:  string;
   timestamp:  number;
   txHash:     string;
+  rawEvent:   IARNSEvent;
 }
 
 interface CurrentAntBarProps {
   name: string;
   expiryTs: number;
-  leaseDuration: string;
   processId: string;
   controllers: string[];
   owner: string;
   ttlSeconds: number;
   onBack: () => void;
+  logoTxId: string;
+  records: Record<string, AntRecord>;
+  targetId: string;
+  undernameLimit: number;
+  expiryDate: Date;
+  leaseDuration: string;
 }
 
 function CurrentAntBar({
@@ -65,6 +58,11 @@ function CurrentAntBar({
   owner,
   ttlSeconds,
   onBack,
+  logoTxId,
+  records,
+  targetId,
+  undernameLimit,
+  expiryDate,
 }: CurrentAntBarProps) {
   return (
     <div className="current-ant-bar">
@@ -88,46 +86,31 @@ function CurrentAntBar({
         Owner: <code>{owner.slice(0,5)}...</code>
       </span>
       <span>TTL: {ttlSeconds}s</span>
+      <span>Logo Tx ID: <code>{logoTxId.slice(0,5)}...</code></span>
+      <span>Target ID: <code>{targetId.slice(0,5)}...</code></span>
+      <span>Undername Limit: {undernameLimit}</span>
     </div>
   );
 }
 
-type DetailedCardProps = {
-  event: UIEvent;
-  onClose: () => void;
-};
-
-// ─── DetailedCard pop‑up ─────────────────
-function DetailedCard({ event, onClose }: DetailedCardProps) {
-  return (
-    <div className="detailed-card">
-      <button className="close-btn" onClick={onClose}>×</button>
-      <h3>{event.action}</h3>
-      <p><strong>Actor:</strong> {event.actor}</p>
-      <p><strong>Date:</strong> {new Date(event.timestamp * 1000).toLocaleString()}</p>
-      <p><strong>Tx Hash:</strong> {event.txHash}</p>
-      <p><strong>Legend Key:</strong> {event.legendKey}</p>
-    </div>
-  );
-}
 
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
-  const [events, setEvents]       = useState<UIEvent[]>([]);
+  const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
   // 🆕 selection state
-  const [selectedEvent, setSelectedEvent] = useState<UIEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
   // ANT detail state (unchanged)
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
-
+  
   // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
@@ -234,12 +217,12 @@ export default function History() {
           }
 
           return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$ }).pipe(
-            map(({ actor, timestamp, txHash }) => ({ action, actor, legendKey, timestamp, txHash } as UIEvent))
+            map(({ actor, timestamp, txHash }) => ({ action, actor, legendKey, timestamp, txHash, rawEvent: e } as TimelineEvent))
           );
         })
       )
       .subscribe({
-        next: (uiEvt: UIEvent) => setEvents(prev => [...prev, uiEvt]),
+        next: (uiEvt: TimelineEvent) => setEvents(prev => [...prev, uiEvt]),
         error: err => {
           console.error(err);
           setError(err.message || 'Failed to load history');
@@ -251,56 +234,58 @@ export default function History() {
     return () => sub.unsubscribe();
   }, [arnsname]);
 
-  useEffect(() => {
-    if (!selectedEvent) return;  // only when detail is open
 
+
+  useEffect(() => {
+    if (!selectedEvent) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        detailRef.current &&
-        !detailRef.current.contains(e.target as Node)
-      ) {
+      if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
         setSelectedEvent(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedEvent]);
+
+
 
   if (loading) return <div className="loading">Loading history…</div>;
   if (error)   return <div className="error">{error}</div>;
 
   // Build the timeline cards & make them clickable
-  const timelineEvents = events.map((st, i) => ({
-    key: `${st.txHash}-${i}`,
-    content: (
-      <div
-        className="chain-card clickable"
-        onClick={() => setSelectedEvent(st)}
-      >
-        <div className="chain-card-header">
-          <span className="action-text">{st.action}</span>
-          <span className="actor">{st.actor.slice(0, 4)}</span>
-          <span className={`legend-square ${st.legendKey}`}></span>
+  const timelineEvents = events.map((st, i) => {
+    const isSelected = selectedEvent?.txHash === st.txHash;
+    return {
+      key: `${st.txHash}-${i}`,
+      content: (
+        <div
+          className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+          onClick={() =>
+            setSelectedEvent(prev => (prev?.txHash === st.txHash ? null : st))
+          }
+        >
+          <div className="chain-card-header">
+            <span className="action-text">{st.action}</span>
+            <span className="actor">{st.actor.slice(0, 4)}</span>
+            <span className={`legend-square ${st.legendKey}`}></span>
+          </div>
+          <hr />
+          <div className="chain-card-footer">
+            <span className="date">
+              {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric'
+              })}
+            </span>
+            <span className="txid">
+              <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
+                {st.txHash}
+              </a>
+            </span>
+          </div>
         </div>
-        <hr />
-        <div className="chain-card-footer">
-          <span className="date">
-            {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
-              year: 'numeric', month: 'short', day: 'numeric'
-            })}
-          </span>
-          <span className="txid">
-            <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
-              {st.txHash}
-            </a>
-          </span>
-        </div>
-      </div>
-    ),
-  }));
+      ),
+    };
+  });
 
   return (
     <div className="history">
@@ -337,16 +322,21 @@ export default function History() {
         <CurrentAntBar
           name={antDetail.name}
           expiryTs={antDetail.endTimestamp}
-          leaseDuration={antDetail.type === 'lease' 
-            ? `${Math.floor((antDetail.endTimestamp - antDetail.startTimestamp)/(60*60*24*365))} years`
-            : antDetail.type
-          }
+          leaseDuration={antDetail.type === 'lease'
+            ? `${Math.floor((antDetail.endTimestamp - antDetail.startTimestamp) / (60 * 60 * 24 * 365))} years`
+            : antDetail.type}
           processId={antDetail.processId}
           controllers={antDetail.controllers}
           owner={antDetail.owner}
           ttlSeconds={antDetail.ttlSeconds}
-          onBack={() => navigate(-2)}
-        />
+          logoTxId={antDetail.logoTxId} 
+          records={antDetail.records} 
+          targetId={antDetail.targetId} 
+          undernameLimit={antDetail.undernameLimit} 
+          expiryDate={antDetail.expiryDate} 
+
+          onBack={() => navigate(-2)} 
+          />
       )}
 
       {/* Draggable chain */}
@@ -387,13 +377,10 @@ export default function History() {
         </TransformWrapper>
       </div>
 
-      {/* 🆕 Detail pop‑up */}
+      {/* 🆕 Detail pop‑up → dispatch to per‑event component */}
       {selectedEvent && (
         <div ref={detailRef}>
-          <DetailedCard
-            event={selectedEvent}
-            onClose={() => setSelectedEvent(null)}
-          />
+          <EventDetails uiEvent={selectedEvent} />
         </div>
       )}
     </div>
