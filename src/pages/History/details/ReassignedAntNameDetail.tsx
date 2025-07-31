@@ -9,7 +9,7 @@ const reassignFields: FieldDescriptor<ReassignNameEvent>[] = [
   { label: 'Event Tx ID',           getter: async e => e.getEventMessageId() },
   { label: 'Reassigned Process ID', getter: async e => e.getReassignedProcessId() }];
 
-export default function ReassignedAntNameDetails({
+export default function ReassignedAntNameDetail({
   evt,
 }: {
   evt: ReassignNameEvent;

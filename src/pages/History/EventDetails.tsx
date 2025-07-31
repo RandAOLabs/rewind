@@ -2,7 +2,7 @@ import React from 'react';
 import type { TimelineEvent } from './History';
 import BuyNameEventDetail from './details/BuyNameEventDetail';
 import IncreaseUndernameDetail from './details/IncreaseUndernameDetail';
-import ReassignedAntNameDetails from './details/ReassignedAntNameDetails';
+import ReassignedAntNameDetail from './details/ReassignedAntNameDetail';
 import StateNoticeDetails from './details/StateNoticeDetail';
 // → import your other detail components here
 
@@ -20,7 +20,7 @@ export default function EventDetails({
           case 'IncreaseUndernameEvent':
             return <IncreaseUndernameDetail evt={raw} />;
           case 'ReassignNameEvent':
-            return <ReassignedAntNameDetails evt={raw} />;
+            return <ReassignedAntNameDetail evt={raw} />;
           case 'StateNoticeEvent':
             return <StateNoticeDetails evt={raw} />;
           // …other cases…
