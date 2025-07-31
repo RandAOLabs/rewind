@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import {
   ARIORewindService,
   BuyNameEvent,
@@ -15,6 +16,7 @@ import {
   IARNSEvent,
   AntRecord,
   ARNameDetail,
+  StateNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
@@ -111,6 +113,28 @@ export default function History() {
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
   
+
+  // a ref to the TransformWrapper instance
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  // map of txHash → DOM node
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // unified click handler
+  const onCardClick = (st: TimelineEvent) => {
+    // toggle selection
+    setSelectedEvent(prev => (prev?.txHash === st.txHash ? null : st));
+
+    // if we're selecting a new one, pan/zoom to it
+    if (transformRef.current && cardRefs.current[st.txHash]) {
+      transformRef.current.zoomToElement(
+        cardRefs.current[st.txHash]!,
+        5   // animation duration in ms
+      );
+    }
+  };
+
+
+
   // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
@@ -146,7 +170,7 @@ export default function History() {
             case BuyNameEvent.name: {
               const ev = e as BuyNameEvent;
               action    = 'Purchased ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-buy-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -155,7 +179,7 @@ export default function History() {
             case ReassignNameEvent.name: {
               const ev = e as ReassignNameEvent;
               action    = 'Reassigned ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-reassign-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -164,7 +188,7 @@ export default function History() {
             case ReturnedNameEvent.name: {
               const ev = e as ReturnedNameEvent;
               action    = 'Returned ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-return-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -200,7 +224,16 @@ export default function History() {
             case UpgradeNameEvent.name: {
               const ev = e as UpgradeNameEvent;
               action    = 'Upgraded ANT Name';
-              legendKey = 'ant-content-change';
+              legendKey = 'ant-upgrade-event';
+              actor$    = of(ev.getInitiator());
+              timestamp$= of(ev.getEventTimeStamp());
+              txHash$   = of(ev.getEventMessageId());
+              break;
+            }
+            case StateNoticeEvent.name: {
+              const ev = e as StateNoticeEvent;
+              action    = 'State Notice';
+              legendKey = 'ant-state-change';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -253,39 +286,46 @@ export default function History() {
   if (error)   return <div className="error">{error}</div>;
 
   // Build the timeline cards & make them clickable
-  const timelineEvents = events.map((st, i) => {
-    const isSelected = selectedEvent?.txHash === st.txHash;
-    return {
-      key: `${st.txHash}-${i}`,
-      content: (
-        <div
-          className={`chain-card clickable${isSelected ? ' selected' : ''}`}
-          onClick={() =>
-            setSelectedEvent(prev => (prev?.txHash === st.txHash ? null : st))
-          }
-        >
-          <div className="chain-card-header">
-            <span className="action-text">{st.action}</span>
-            <span className="actor">{st.actor.slice(0, 4)}</span>
-            <span className={`legend-square ${st.legendKey}`}></span>
+  const timelineEvents = [...events]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((st, i) => {
+      const isSelected = selectedEvent?.txHash === st.txHash
+      return {
+        key: `${st.txHash}-${i}`,
+        content: (
+          <div
+            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+            ref={el => { cardRefs.current[st.txHash] = el }}
+            onClick={() => onCardClick(st)}
+          >
+            <div className="chain-card-header">
+              <span className="action-text">{st.action}</span>
+              <span className="actor">Actor: {st.actor.slice(0,5)}</span>
+              <span className={`legend-square ${st.legendKey}`}></span>
+            </div>
+            <hr />
+            <div className="chain-card-footer">
+              <span className="date">
+                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </span>
+              <span className="txid">
+                <a
+                  href={`https://www.ao.link/#/message/${st.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {st.txHash}
+                </a>
+              </span>
+            </div>
           </div>
-          <hr />
-          <div className="chain-card-footer">
-            <span className="date">
-              {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
-                year: 'numeric', month: 'short', day: 'numeric'
-              })}
-            </span>
-            <span className="txid">
-              <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
-                {st.txHash}
-              </a>
-            </span>
-          </div>
-        </div>
-      ),
-    };
-  });
+        )
+      }
+    })
 
   return (
     <div className="history">
@@ -294,6 +334,9 @@ export default function History() {
         <h4>Legend</h4>
         <div className="legend-section">
           <div className="legend-title">Event Legend:</div>
+          <div className="legend-item">
+            <span className="dot ant-buy-event" /> ANT Purchased
+          </div>
           <div className="legend-item">
             <span className="dot ant-ownership-transfer" /> ANT Ownership Transfer
           </div>
@@ -311,6 +354,12 @@ export default function History() {
           </div>
           <div className="legend-item">
             <span className="dot undername-content-change" /> Undername Content Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-upgrade-event" /> ANT Upgrade
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-state-change" /> ANT State Change
           </div>
         </div>
       </div>
@@ -342,6 +391,7 @@ export default function History() {
       {/* Draggable chain */}
       <div className="chain-wrapper">
         <TransformWrapper
+          ref={transformRef}
           initialScale={1}
           minScale={0.5}
           maxScale={2}
@@ -377,12 +427,25 @@ export default function History() {
         </TransformWrapper>
       </div>
 
-      {/* 🆕 Detail pop‑up → dispatch to per‑event component */}
+      {/* 🆕 Detail pop‑up */}
       {selectedEvent && (
-        <div ref={detailRef}>
+        <div
+          ref={detailRef}
+          className="detailed-card"
+        >
+          {/* close button */}
+          <button
+            className="close-btn"
+            onClick={() => setSelectedEvent(null)}
+          >
+            ×
+          </button>
+
+          {/* dispatch to the per‑event detail component */}
           <EventDetails uiEvent={selectedEvent} />
         </div>
       )}
+
     </div>
   );
 }

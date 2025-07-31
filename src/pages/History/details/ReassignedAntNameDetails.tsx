@@ -3,12 +3,11 @@ import FieldList, { FieldDescriptor } from './FieldList';
 import { ReassignNameEvent } from 'ao-js-sdk';
 
 const reassignFields: FieldDescriptor<ReassignNameEvent>[] = [
-  { label: 'Buyer',           getter: async e => e.getARNSProcessId() },
-  { label: 'Process ID',      getter: async e => e.getARNSProcessId() },
-  { label: 'Start Time',      getter: async e => e.getStartTime() },
-  { label: 'Event Tx ID',     getter: async e => e.getEventMessageId() },
-  { label: 'Undername Limit', getter: async e => e.getUndernameLimit() },
-];
+  { label: 'Buyer',                 getter: async e => e.getARNSProcessId() },
+  { label: 'Process ID',            getter: async e => e.getARNSProcessId() },
+  { label: 'Start Time',            getter: async e => e.getStartTime() },
+  { label: 'Event Tx ID',           getter: async e => e.getEventMessageId() },
+  { label: 'Reassigned Process ID', getter: async e => e.getReassignedProcessId() }];
 
 export default function ReassignedAntNameDetails({
   evt,
