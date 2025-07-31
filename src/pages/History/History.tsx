@@ -1,5 +1,5 @@
 // src/pages/History/History.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -114,16 +114,16 @@ export default function History() {
   const [antError, setAntError]       = useState<string | null>(null);
   
 
-  // a ref to the TransformWrapper instance
+  // 1️⃣ Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
-  // map of txHash → DOM node
-  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // onClick only toggles selection
   const onCardClick = (evt: TimelineEvent) => {
     setSelectedEvent(prev =>
       prev?.txHash === evt.txHash ? null : evt
     );
-  };  
+  };
 
   // fetch ANT detail (unchanged)
   useEffect(() => {
@@ -235,7 +235,7 @@ export default function History() {
               legendKey = 'multiple-changes';
               actor$    = of(e.getInitiator());
               timestamp$= of(e.getEventTimeStamp());
-              txHash$   = of('');
+              txHash$   = of(e.getEventMessageId());
             }
           }
 
@@ -258,26 +258,15 @@ export default function History() {
   }, [arnsname]);
 
 
-
-  useEffect(() => {
+  // 3️⃣ After DOM update, pan/zoom to the newly-selected card
+  useLayoutEffect(() => {
     if (!selectedEvent) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
-        setSelectedEvent(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [selectedEvent]);
-
-  useEffect(() => {
-    if (!selectedEvent) return;
-  
     const node = cardRefs.current[selectedEvent.txHash];
     if (transformRef.current && node) {
       transformRef.current.zoomToElement(node, 300);
     }
   }, [selectedEvent]);
+  
   
 
   if (loading) return <div className="loading">Loading history…</div>;
@@ -412,12 +401,57 @@ export default function History() {
                 wrapperStyle={{ width: '100%', height: '100%', position: 'relative' }}
                 contentStyle={{ width: '100%', height: '100%' }}
               >
+
                 <div className="chain-container">
-                  {timelineEvents.map(ev => (
-                    <div key={ev.key} className="chain-item">
-                      {ev.content}
-                    </div>
-                  ))}
+                  {events
+                    .slice() // copy
+                    .sort((a, b) => a.timestamp - b.timestamp)
+                    .map((st, idx) => {
+                      const isSelected = selectedEvent?.txHash === st.txHash;
+                      return (
+                        <div
+                          key={`${st.txHash}-${idx}`}
+                          className="chain-item"
+                          ref={el => {
+                            cardRefs.current[st.txHash] = el;
+                          }}
+                        >
+                          <div
+                            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+                            onClick={() => onCardClick(st)}
+                          >
+                            <div className="chain-card-header">
+                              <span className="action-text">{st.action}</span>
+                              <span className="actor">
+                                Actor: {st.actor.slice(0, 5)}
+                              </span>
+                              <span className={`legend-square ${st.legendKey}`} />
+                            </div>
+                            <hr />
+                            <div className="chain-card-footer">
+                              <span className="date">
+                                {new Date(
+                                  st.timestamp * 1000
+                                ).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
+                              <span className="txid">
+                                <a
+                                  href={`https://www.ao.link/#/message/${st.txHash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {st.txHash}
+                                </a>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </TransformComponent>
             </>
