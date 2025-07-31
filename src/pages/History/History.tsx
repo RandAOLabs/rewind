@@ -119,21 +119,11 @@ export default function History() {
   // map of txHash → DOM node
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // unified click handler
-  const onCardClick = (st: TimelineEvent) => {
-    // toggle selection
-    setSelectedEvent(prev => (prev?.txHash === st.txHash ? null : st));
-
-    // if we're selecting a new one, pan/zoom to it
-    if (transformRef.current && cardRefs.current[st.txHash]) {
-      transformRef.current.zoomToElement(
-        cardRefs.current[st.txHash]!,
-        5   // animation duration in ms
-      );
-    }
-  };
-
-
+  const onCardClick = (evt: TimelineEvent) => {
+    setSelectedEvent(prev =>
+      prev?.txHash === evt.txHash ? null : evt
+    );
+  };  
 
   // fetch ANT detail (unchanged)
   useEffect(() => {
@@ -280,7 +270,15 @@ export default function History() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedEvent]);
 
-
+  useEffect(() => {
+    if (!selectedEvent) return;
+  
+    const node = cardRefs.current[selectedEvent.txHash];
+    if (transformRef.current && node) {
+      transformRef.current.zoomToElement(node, 300);
+    }
+  }, [selectedEvent]);
+  
 
   if (loading) return <div className="loading">Loading history…</div>;
   if (error)   return <div className="error">{error}</div>;
