@@ -30,7 +30,7 @@
   padding: 0 1rem;
   font-size: 0.875rem;
   color: #fff;
-  z-index: 1001;
+  z-index: 100100;
   border-top: 1px solid #222;
   border-bottom: 1px solid #222;
 }
@@ -127,15 +127,6 @@
   font-size: 0.95rem;
 }
 
-.legend-square {
-  position: absolute;
-  right: 1rem;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  display: inline-block;
-}
-
 /* container for chain + detail pane */
 .history-main {
   display: flex;
@@ -145,54 +136,89 @@
 }
 
 
-/* ================= Detail Card ================= */
+/* Container for the entire detail panel */
+
+/* 2. Base “hidden off‑screen” + slide‑in animation on mount */
 .detailed-card {
   position: absolute;
-  top: calc(var(--header-height) + var(--current-ant-height) + 1rem);
-  right: 1rem;
+  top: calc(var(--header-height) + var(--current-ant-height));
+  right: 0;
+  bottom: 0;
   width: 320px;
-  max-height: calc(100vh - var(--header-height) - var(--current-ant-height) - 2rem);
-  background-color: #1e1e24;
-  border-radius: 8px;
-  padding: 1.25rem;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.6);
-  color: #e0e0e0;
-  font-family: inherit;
+  background: linear-gradient(135deg, rgba(30,30,36,0.95), rgba(22,22,28,0.95));
+  backdrop-filter: blur(8px);
+  border-left: 4px solid #1e90ff;
+  border-radius: 12px 0 0 12px;
+  padding: 1.5rem;
+  box-shadow: -6px 0 20px rgba(0,0,0,0.7);
   overflow-y: auto;
-  z-index: 1005;
+  z-index: 10050;
+  color: #e0e0e0;
+
+  /* Start completely off‑screen */
+  transform: translateX(100%);
+
+  /* Animate into place */
+  animation: panelSlideIn 0.35s ease-out forwards;
 }
 
-/* Close button (×) */
+/* 3. Keyframes to move from 100% → 0 */
+@keyframes panelSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+/* 4. Optional: make closing snap it back immediately */
+.detailed-card.closing {
+  animation: none;
+  transform: translateX(100%);
+}
+
+/* pin the × close button */
 .detailed-card .close-btn {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  background: none;
+  background: transparent;
   border: none;
-  font-size: 1.2rem;
-  color: #888;
+  font-size: 1.5rem;
+  color: #bbb;
   cursor: pointer;
   transition: color 0.2s;
+  width: 2rem;
+  height: 2rem;
 }
 .detailed-card .close-btn:hover {
   color: #fff;
 }
 
-/* Each section within the card */
+/* 5. (Keep your sub‑section styling) */
 .event-detail-section + .event-detail-section {
   margin-top: 1.5rem;
-  padding-top: 1rem;
+  padding-top: 1.25rem;
   border-top: 1px solid #333;
 }
 .event-detail-section h4 {
   margin: 0 0 0.75rem;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   color: #fff;
-  border-bottom: 1px solid #444;
-  padding-bottom: 0.25rem;
+  position: relative;
+}
+.event-detail-section h4::after {
+  content: "";
+  position: absolute;
+  bottom: -0.3rem;
+  left: 0;
+  width: 36px;
+  height: 3px;
+  background: #1e90ff;
+  border-radius: 2px;
 }
 
-/* Field list as two‑column grid */
+/* 6. Field list layout */
 .field-list {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -201,14 +227,18 @@
   margin: 0;
 }
 .field-list dt {
-  font-weight: bold;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
   color: #bbb;
 }
 .field-list dd {
   margin: 0;
+  font-size: 0.95rem;
   color: #e0e0e0;
   word-break: break-word;
 }
+
 
 
 
@@ -220,12 +250,16 @@
 
 
 /* ─── Card Header square colors ─────────────────────── */
-.legend-square.ant-ownership-transfer    { background: #FFD700; }  /* gold */
-.legend-square.ant-content-change        { background: #1E90FF; }  /* dodgerblue */
-.legend-square.ant-renewal               { background: #32CD32; }  /* limegreen */
+.legend-square.ant-ownership-transfer    { background: #ff004c; }  /* red */
+.legend-square.ant-content-change        { background: #1E90FF; }  /* blue */
+.legend-square.ant-renewal               { background: #32CD32; }  /* green */
 .legend-square.undername-creation        { background: #00CED1; }  /* darkturquoise */
 .legend-square.ant-controller-addition   { background: #C71585; }  /* mediumvioletred */
-.legend-square.undername-content-change  { background: #FFA500; }  /* orange */
+.legend-square.ant-reassign-event        { background: #FFD700; }  /* gold */
+.legend-square.ant-return-event          { background: #d3d1cc; }  /* gray */
+.legend-square.ant-buy-event             { background: #FFA500; }  /* orange */
+.legend-square.ant-state-change          { background: #896dd4; }  /* gray */
+.legend-square.ant-upgrade-event         { background: #98dda4; }  /* gray */
 
 
 .legend-square.text-change      { background: orange; }
@@ -247,7 +281,23 @@
 /* bold the action text */
 .action-text {
   font-weight: bold;
-  font-size: 0.7rem;
+  font-size: 0.9rem;
+}
+
+.actor {
+  position: absolute;
+  right: 3rem;
+  font-size: 0.9rem;
+  display: inline-block;
+}
+
+.legend-square {
+  position: absolute;
+  right: 1rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
 }
 
 /* ─── Divider ────────────────────────────────────────── */
@@ -339,6 +389,9 @@
 .dot.undername-creation        { background: #00CED1; }
 .dot.ant-controller-addition   { background: #C71585; }
 .dot.undername-content-change  { background: #FFA500; }
+.dot.ant-upgrade-event         { background: #98dda4; }
+.dot.ant-state-change          { background: #896dd4; }
+.dot.ant-buy-event             { background: #ff004c; }
 
 /* Card Legend colors */
 .dot.text-change        { background: orange; }
