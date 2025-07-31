@@ -1,8 +1,9 @@
 // src/pages/History/History.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import {
   ARIORewindService,
   BuyNameEvent,
@@ -15,6 +16,7 @@ import {
   IARNSEvent,
   AntRecord,
   ARNameDetail,
+  StateNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
@@ -111,6 +113,18 @@ export default function History() {
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
   
+
+  // 1️⃣ Refs for pan/zoom and each card
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // onClick only toggles selection
+  const onCardClick = (evt: TimelineEvent) => {
+    setSelectedEvent(prev =>
+      prev?.txHash === evt.txHash ? null : evt
+    );
+  };
+
   // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
@@ -146,7 +160,7 @@ export default function History() {
             case BuyNameEvent.name: {
               const ev = e as BuyNameEvent;
               action    = 'Purchased ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-buy-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -155,7 +169,16 @@ export default function History() {
             case ReassignNameEvent.name: {
               const ev = e as ReassignNameEvent;
               action    = 'Reassigned ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-reassign-event';
+              actor$    = of(ev.getInitiator());
+              timestamp$= of(ev.getEventTimeStamp());
+              txHash$   = of(ev.getEventMessageId());
+              break;
+            }
+            case ExtendLeaseEvent.name: {
+              const ev = e as ExtendLeaseEvent;
+              action    = 'Extended Lease';
+              legendKey = 'ant-extend-lease-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -164,7 +187,7 @@ export default function History() {
             case ReturnedNameEvent.name: {
               const ev = e as ReturnedNameEvent;
               action    = 'Returned ANT Name';
-              legendKey = 'ant-ownership-transfer';
+              legendKey = 'ant-return-event';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -200,7 +223,16 @@ export default function History() {
             case UpgradeNameEvent.name: {
               const ev = e as UpgradeNameEvent;
               action    = 'Upgraded ANT Name';
-              legendKey = 'ant-content-change';
+              legendKey = 'ant-upgrade-event';
+              actor$    = of(ev.getInitiator());
+              timestamp$= of(ev.getEventTimeStamp());
+              txHash$   = of(ev.getEventMessageId());
+              break;
+            }
+            case StateNoticeEvent.name: {
+              const ev = e as StateNoticeEvent;
+              action    = 'State Notice';
+              legendKey = 'ant-state-change';
               actor$    = of(ev.getInitiator());
               timestamp$= of(ev.getEventTimeStamp());
               txHash$   = of(ev.getEventMessageId());
@@ -212,7 +244,7 @@ export default function History() {
               legendKey = 'multiple-changes';
               actor$    = of(e.getInitiator());
               timestamp$= of(e.getEventTimeStamp());
-              txHash$   = of('');
+              txHash$   = of(e.getEventMessageId());
             }
           }
 
@@ -235,38 +267,44 @@ export default function History() {
   }, [arnsname]);
 
 
-
-  useEffect(() => {
+  // 3️⃣ After DOM update, pan/zoom to the newly-selected card
+  useLayoutEffect(() => {
     if (!selectedEvent) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
-        setSelectedEvent(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const node = cardRefs.current[selectedEvent.txHash];
+    if (transformRef.current && node) {
+      transformRef.current.zoomToElement(node, 300);
+    }
   }, [selectedEvent]);
-
-
+  
+  
 
   if (loading) return <div className="loading">Loading history…</div>;
   if (error)   return <div className="error">{error}</div>;
 
+  const uniqueMap = new Map<string, TimelineEvent>();
+  events.forEach(evt => {
+    if (!uniqueMap.has(evt.txHash)) {
+      uniqueMap.set(evt.txHash, evt);
+    }
+  });
+
+
   // Build the timeline cards & make them clickable
-  const timelineEvents = events.map((st, i) => {
+  const timelineEvents = Array.from(uniqueMap.values())
+  .sort((a, b) => a.timestamp - b.timestamp)
+  .map((st, i) => {
     const isSelected = selectedEvent?.txHash === st.txHash;
     return {
       key: `${st.txHash}-${i}`,
       content: (
         <div
           className={`chain-card clickable${isSelected ? ' selected' : ''}`}
-          onClick={() =>
-            setSelectedEvent(prev => (prev?.txHash === st.txHash ? null : st))
-          }
+          ref={el => { cardRefs.current[st.txHash] = el; }}
+          onClick={() => onCardClick(st)}
         >
           <div className="chain-card-header">
             <span className="action-text">{st.action}</span>
-            <span className="actor">{st.actor.slice(0, 4)}</span>
+            <span className="actor">Actor: {st.actor.slice(0,5)}</span>
             <span className={`legend-square ${st.legendKey}`}></span>
           </div>
           <hr />
@@ -277,15 +315,20 @@ export default function History() {
               })}
             </span>
             <span className="txid">
-              <a href={`https://arweave.net/${st.txHash}`} target="_blank" rel="noopener noreferrer">
+              <a
+                href={`https://www.ao.link/#/message/${st.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {st.txHash}
               </a>
             </span>
           </div>
         </div>
-      ),
+      )
     };
   });
+
 
   return (
     <div className="history">
@@ -295,22 +338,34 @@ export default function History() {
         <div className="legend-section">
           <div className="legend-title">Event Legend:</div>
           <div className="legend-item">
-            <span className="dot ant-ownership-transfer" /> ANT Ownership Transfer
+            <span className="dot ant-buy-event" /> ANT Purchase
           </div>
           <div className="legend-item">
-            <span className="dot ant-content-change" /> ANT Content Change
+            <span className="dot ant-ownership-transfer" /> Ownership Transfer
           </div>
           <div className="legend-item">
-            <span className="dot ant-renewal" /> ANT Renewal
+            <span className="dot ant-upgrade-event" /> ANT Upgrade
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-content-change" /> Content Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-renewal" /> Lease Renewal
           </div>
           <div className="legend-item">
             <span className="dot undername-creation" /> Undername Creation
           </div>
           <div className="legend-item">
-            <span className="dot ant-controller-addition" /> ANT Controller Addition
+            <span className="dot ant-controller-addition" /> Controller Addition
           </div>
           <div className="legend-item">
             <span className="dot undername-content-change" /> Undername Content Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-state-change" /> State Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-extend-lease-event" /> Extend Lease
           </div>
         </div>
       </div>
@@ -342,6 +397,7 @@ export default function History() {
       {/* Draggable chain */}
       <div className="chain-wrapper">
         <TransformWrapper
+          ref={transformRef}
           initialScale={1}
           minScale={0.5}
           maxScale={2}
@@ -365,11 +421,11 @@ export default function History() {
                 contentStyle={{ width: '100%', height: '100%' }}
               >
                 <div className="chain-container">
-                  {timelineEvents.map(ev => (
-                    <div key={ev.key} className="chain-item">
-                      {ev.content}
-                    </div>
-                  ))}
+                    {timelineEvents.map(ev => (
+                      <div key={ev.key} className="chain-item">
+                        {ev.content}
+                      </div>
+                    ))}
                 </div>
               </TransformComponent>
             </>
@@ -377,12 +433,25 @@ export default function History() {
         </TransformWrapper>
       </div>
 
-      {/* 🆕 Detail pop‑up → dispatch to per‑event component */}
+      {/* 🆕 Detail pop‑up */}
       {selectedEvent && (
-        <div ref={detailRef}>
+        <div
+          ref={detailRef}
+          className="detailed-card"
+        >
+          {/* close button */}
+          <button
+            className="close-btn"
+            onClick={() => setSelectedEvent(null)}
+          >
+            ×
+          </button>
+
+          {/* dispatch to the per‑event detail component */}
           <EventDetails uiEvent={selectedEvent} />
         </div>
       )}
+
     </div>
   );
 }
