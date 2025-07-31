@@ -9,7 +9,7 @@
   position: relative;
   height: 100%;
   width: 100%;
-  background-color: #000;
+  background-color: #000000;
   background-image: radial-gradient(#444 1px, transparent 1px);
   background-size: 20px 20px;
   overflow: hidden;   /* ← no scrollbars on the root */
@@ -347,7 +347,7 @@
   padding: 0.75rem 1rem;
   border-radius: 8px;
   color: #fff;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   z-index: 1003;
   max-width: 150px;
 }
@@ -392,6 +392,7 @@
 .dot.ant-upgrade-event         { background: #98dda4; }
 .dot.ant-state-change          { background: #896dd4; }
 .dot.ant-buy-event             { background: #ff004c; }
+.dot.ant-extend-lease-event    { background: #2baa99; }
 
 /* Card Legend colors */
 .dot.text-change        { background: orange; }
@@ -399,8 +400,10 @@
 .dot.resolver-changed   { background: yellow; }
 .dot.content-hash       { background: magenta; }
 .dot.multiple-changes   { background: purple; }
+.dot.ant-extend-lease-event { background: #2baa99; }
 
 /* Data Legend colors */
 .dot.added-records      { background: green; }
 .dot.updated-records    { background: blue; }
 .dot.removed-records    { background: red; }
+.dot.ant-extend-lease-event { background: #2baa99; }

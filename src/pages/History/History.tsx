@@ -175,6 +175,15 @@ export default function History() {
               txHash$   = of(ev.getEventMessageId());
               break;
             }
+            case ExtendLeaseEvent.name: {
+              const ev = e as ExtendLeaseEvent;
+              action    = 'Extended Lease';
+              legendKey = 'ant-extend-lease-event';
+              actor$    = of(ev.getInitiator());
+              timestamp$= of(ev.getEventTimeStamp());
+              txHash$   = of(ev.getEventMessageId());
+              break;
+            }
             case ReturnedNameEvent.name: {
               const ev = e as ReturnedNameEvent;
               action    = 'Returned ANT Name';
@@ -272,47 +281,54 @@ export default function History() {
   if (loading) return <div className="loading">Loading history…</div>;
   if (error)   return <div className="error">{error}</div>;
 
+  const uniqueMap = new Map<string, TimelineEvent>();
+  events.forEach(evt => {
+    if (!uniqueMap.has(evt.txHash)) {
+      uniqueMap.set(evt.txHash, evt);
+    }
+  });
+
+
   // Build the timeline cards & make them clickable
-  const timelineEvents = [...events]
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .map((st, i) => {
-      const isSelected = selectedEvent?.txHash === st.txHash
-      return {
-        key: `${st.txHash}-${i}`,
-        content: (
-          <div
-            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
-            ref={el => { cardRefs.current[st.txHash] = el }}
-            onClick={() => onCardClick(st)}
-          >
-            <div className="chain-card-header">
-              <span className="action-text">{st.action}</span>
-              <span className="actor">Actor: {st.actor.slice(0,5)}</span>
-              <span className={`legend-square ${st.legendKey}`}></span>
-            </div>
-            <hr />
-            <div className="chain-card-footer">
-              <span className="date">
-                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric'
-                })}
-              </span>
-              <span className="txid">
-                <a
-                  href={`https://www.ao.link/#/message/${st.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {st.txHash}
-                </a>
-              </span>
-            </div>
+  const timelineEvents = Array.from(uniqueMap.values())
+  .sort((a, b) => a.timestamp - b.timestamp)
+  .map((st, i) => {
+    const isSelected = selectedEvent?.txHash === st.txHash;
+    return {
+      key: `${st.txHash}-${i}`,
+      content: (
+        <div
+          className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+          ref={el => { cardRefs.current[st.txHash] = el; }}
+          onClick={() => onCardClick(st)}
+        >
+          <div className="chain-card-header">
+            <span className="action-text">{st.action}</span>
+            <span className="actor">Actor: {st.actor.slice(0,5)}</span>
+            <span className={`legend-square ${st.legendKey}`}></span>
           </div>
-        )
-      }
-    })
+          <hr />
+          <div className="chain-card-footer">
+            <span className="date">
+              {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric'
+              })}
+            </span>
+            <span className="txid">
+              <a
+                href={`https://www.ao.link/#/message/${st.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {st.txHash}
+              </a>
+            </span>
+          </div>
+        </div>
+      )
+    };
+  });
+
 
   return (
     <div className="history">
@@ -322,31 +338,34 @@ export default function History() {
         <div className="legend-section">
           <div className="legend-title">Event Legend:</div>
           <div className="legend-item">
-            <span className="dot ant-buy-event" /> ANT Purchased
+            <span className="dot ant-buy-event" /> ANT Purchase
           </div>
           <div className="legend-item">
-            <span className="dot ant-ownership-transfer" /> ANT Ownership Transfer
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-content-change" /> ANT Content Change
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-renewal" /> ANT Renewal
-          </div>
-          <div className="legend-item">
-            <span className="dot undername-creation" /> Undername Creation
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-controller-addition" /> ANT Controller Addition
-          </div>
-          <div className="legend-item">
-            <span className="dot undername-content-change" /> Undername Content Change
+            <span className="dot ant-ownership-transfer" /> Ownership Transfer
           </div>
           <div className="legend-item">
             <span className="dot ant-upgrade-event" /> ANT Upgrade
           </div>
           <div className="legend-item">
-            <span className="dot ant-state-change" /> ANT State Change
+            <span className="dot ant-content-change" /> Content Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-renewal" /> Lease Renewal
+          </div>
+          <div className="legend-item">
+            <span className="dot undername-creation" /> Undername Creation
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-controller-addition" /> Controller Addition
+          </div>
+          <div className="legend-item">
+            <span className="dot undername-content-change" /> Undername Content Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-state-change" /> State Change
+          </div>
+          <div className="legend-item">
+            <span className="dot ant-extend-lease-event" /> Extend Lease
           </div>
         </div>
       </div>
@@ -401,57 +420,12 @@ export default function History() {
                 wrapperStyle={{ width: '100%', height: '100%', position: 'relative' }}
                 contentStyle={{ width: '100%', height: '100%' }}
               >
-
                 <div className="chain-container">
-                  {events
-                    .slice() // copy
-                    .sort((a, b) => a.timestamp - b.timestamp)
-                    .map((st, idx) => {
-                      const isSelected = selectedEvent?.txHash === st.txHash;
-                      return (
-                        <div
-                          key={`${st.txHash}-${idx}`}
-                          className="chain-item"
-                          ref={el => {
-                            cardRefs.current[st.txHash] = el;
-                          }}
-                        >
-                          <div
-                            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
-                            onClick={() => onCardClick(st)}
-                          >
-                            <div className="chain-card-header">
-                              <span className="action-text">{st.action}</span>
-                              <span className="actor">
-                                Actor: {st.actor.slice(0, 5)}
-                              </span>
-                              <span className={`legend-square ${st.legendKey}`} />
-                            </div>
-                            <hr />
-                            <div className="chain-card-footer">
-                              <span className="date">
-                                {new Date(
-                                  st.timestamp * 1000
-                                ).toLocaleDateString(undefined, {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </span>
-                              <span className="txid">
-                                <a
-                                  href={`https://www.ao.link/#/message/${st.txHash}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {st.txHash}
-                                </a>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {timelineEvents.map(ev => (
+                      <div key={ev.key} className="chain-item">
+                        {ev.content}
+                      </div>
+                    ))}
                 </div>
               </TransformComponent>
             </>
