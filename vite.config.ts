@@ -5,6 +5,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/',
   plugins: [
     react(),
     viteSingleFile(),
@@ -12,6 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'inline',
       includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
+
       manifest: {
         name: 'AR.IO React App',
         short_name: 'AR.IO App',
