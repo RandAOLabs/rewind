@@ -1,7 +1,7 @@
 import React from 'react';
 import FieldList, { FieldDescriptor } from './FieldList';
-import { ISetRecordEvent } from 'ao-js-sdk';
-const setRecordFields: FieldDescriptor<ISetRecordEvent>[] = [
+import { SetRecordEvent } from 'ao-js-sdk';
+const setRecordFields: FieldDescriptor<SetRecordEvent>[] = [
   { label: 'Actor',                 getter: async e => e.getANTProcessId() },
   { label: 'Process ID',            getter: async e => e.getANTProcessId() },
   { label: 'Event Tx ID',           getter: async e => e.getEventMessageId() },
@@ -12,7 +12,7 @@ const setRecordFields: FieldDescriptor<ISetRecordEvent>[] = [
 export default function SetRecordDetails({
   evt,
 }: {
-  evt: ISetRecordEvent;
+  evt: SetRecordEvent;
 }) {
   return (
     <div className="event-detail-section">

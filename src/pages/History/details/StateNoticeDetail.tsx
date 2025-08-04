@@ -5,7 +5,8 @@ import { StateNoticeEvent } from 'ao-js-sdk';
 const reassignFields: FieldDescriptor<StateNoticeEvent>[] = [
   { label: 'Actor',                 getter: async e => e.getANTProcessId() },
   { label: 'Process ID',            getter: async e => e.getANTProcessId() },
-  { label: 'Event Tx ID',           getter: async e => e.getEventMessageId() }];
+  { label: 'Event Tx ID',           getter: async e => e.getEventMessageId() },
+];
 
 export default function StateNoticeDetails({
   evt,

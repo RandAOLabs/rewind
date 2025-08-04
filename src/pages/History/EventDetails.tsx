@@ -4,7 +4,7 @@ import BuyNameEventDetail from './details/BuyNameEventDetail';
 import IncreaseUndernameDetail from './details/IncreaseUndernameDetail';
 import ReassignedAntNameDetail from './details/ReassignedAntNameDetail';
 import StateNoticeDetails from './details/StateNoticeDetail';
-// → import your other detail components here
+import SetRecordDetails from './details/SetRecordDetail';
 
 export default function EventDetails({
   uiEvent,
@@ -23,6 +23,8 @@ export default function EventDetails({
             return <ReassignedAntNameDetail evt={raw} />;
           case 'StateNoticeEvent':
             return <StateNoticeDetails evt={raw} />;
+          case 'SetRecordEvent':
+            return <SetRecordDetails evt={raw} />;
           // …other cases…
           default:
             return (
