@@ -17,6 +17,7 @@ import {
   AntRecord,
   ARNameDetail,
   StateNoticeEvent,
+  SetRecordEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable } from 'rxjs';
 import { switchMap, mergeMap, map } from 'rxjs/operators';
@@ -220,6 +221,15 @@ export default function History() {
               txHash$   = of(ev.getEventMessageId());
               break;
             }
+            case SetRecordEvent.name: {
+              const ev = e as SetRecordEvent;
+              action    = 'Set Record';
+              legendKey = 'ant-content-change';
+              actor$    = of(ev.getInitiator());
+              timestamp$= of(ev.getEventTimeStamp());
+              txHash$   = of(ev.getEventMessageId());
+              break;
+            }
             case UpgradeNameEvent.name: {
               const ev = e as UpgradeNameEvent;
               action    = 'Upgraded ANT Name';
@@ -328,7 +338,6 @@ export default function History() {
       )
     };
   });
-
 
   return (
     <div className="history">
