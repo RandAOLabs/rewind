@@ -10,6 +10,7 @@ export default defineConfig({
     react(),
     viteSingleFile(),
     VitePWA({
+      disable: true, 
       registerType: 'autoUpdate',
       injectRegister: 'inline',
       includeAssets: ['auto.ico', 'robots.txt', 'apple-touch-icon.png'],
