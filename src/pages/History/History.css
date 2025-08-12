@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2rem;
+  gap: 0.5rem;
   padding: 0 1rem;
   font-size: 0.875rem;
   color: #fff;
@@ -34,6 +34,26 @@
   border-top: 1px solid #222;
   border-bottom: 1px solid #222;
 }
+
+
+/* add a thin divider to every span except the first */
+.current-ant-bar span + span {
+  position: relative;
+  padding-left: 0.75rem;
+  margin-left: 0.75rem;
+}
+
+/* the divider “bar” itself */
+.current-ant-bar span + span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 2px;
+  background-color: #444;  /* adjust to taste */
+}
+
 
 /* back arrow */
 .current-ant-bar .back-button {
@@ -136,108 +156,287 @@
 }
 
 
-/* Container for the entire detail panel */
-
-/* 2. Base “hidden off‑screen” + slide‑in animation on mount */
+/* ---- Detailed panel container ---- */
 .detailed-card {
   position: absolute;
-  top: calc(var(--header-height) + var(--current-ant-height));
-  right: 0;
-  bottom: 0;
-  width: 320px;
-  background: linear-gradient(135deg, rgba(30,30,36,0.95), rgba(22,22,28,0.95));
-  backdrop-filter: blur(8px);
-  border-left: 4px solid #1e90ff;
+  top: calc(var(--header-height) + var(--current-ant-height) + 8px);
+  right: 12px;
+  bottom: calc(var(--footer-height) + 12px);
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  background: linear-gradient(180deg, #191a1f 0%, #14151a 100%);
+  border-left: 3px solid #3b82f6;         /* accent */
   border-radius: 12px 0 0 12px;
-  padding: 1.5rem;
-  box-shadow: -6px 0 20px rgba(0,0,0,0.7);
-  overflow-y: auto;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.45);
+  color: #e5e7eb;
+  display: flex;
+  overflow: hidden;                         /* single scroll area inside */
   z-index: 10050;
-  color: #e0e0e0;
-
-  /* Start completely off‑screen */
-  transform: translateX(100%);
-
-  /* Animate into place */
-  animation: panelSlideIn 0.35s ease-out forwards;
 }
 
-/* 3. Keyframes to move from 100% → 0 */
-@keyframes panelSlideIn {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-/* 4. Optional: make closing snap it back immediately */
-.detailed-card.closing {
-  animation: none;
-  transform: translateX(100%);
-}
-
-/* pin the × close button */
+/* sticky close button in the top-right of the card */
 .detailed-card .close-btn {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: transparent;
-  border: none;
-  font-size: 1.5rem;
-  color: #bbb;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: #25262c;
+  color: #e5e7eb;
   cursor: pointer;
-  transition: color 0.2s;
-  width: 2rem;
-  height: 2rem;
+  display: grid;
+  place-items: center;
+  line-height: 1;
 }
 .detailed-card .close-btn:hover {
-  color: #fff;
+  background: #2d2f36;
 }
 
-/* 5. (Keep your sub‑section styling) */
-.event-detail-section + .event-detail-section {
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid #333;
+/* ---- Inner layout (EventDetails) ---- */
+.event-detail {
+  padding: 16px 48px 12px 16px;   /* extra right so close-btn never overlaps */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.event-detail-section h4 {
-  margin: 0 0 0.75rem;
+
+/* Header sticks to top while body scrolls */
+.event-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, #191a1f 0%, #17181d 100%);
+  padding: 16px 16px 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Title + spacing */
+.event-title {
+  margin: 0 0 6px 0;
   font-size: 1.15rem;
-  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+/* lay out legend + actor + date without overlapping */
+.event-detail-header .sub {
+  display: grid;
+  grid-template-columns: 14px 1fr; /* dot | content */
+  grid-auto-rows: auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.92rem;
+
+  grid-template-rows: auto auto;   /* actor row, date row */
+  align-items: start;
+}
+
+/* keep the dot tidy and aligned */
+.event-detail-header .sub .legend-square {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.15);
+  margin-top: 2px;
+}
+
+/* actor on first row, can wrap if needed */
+.event-detail-header .sub .actor {
+  overflow-wrap: anywhere;
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  white-space: normal;        /* allow wrapping */
+  word-break: break-word;     /* long IDs won’t overflow */
+  line-height: 1.35;
+}
+
+/* date on its own line below actor */
+.event-detail-header .sub .date {
+  grid-column: 2;
+  grid-row: 2;
+  display: block;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+    
+/* tx line below sub, with clean wrapping */
+.event-detail-header .txline {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
+}
+.event-detail-header .txline a {
+  color: #7aa2ff;
+  text-decoration: underline;
+}
+
+/* Make header auto-height and leave space for the close button */
+.event-detail-header {
+  padding: 16px 48px 12px 16px;   /* extra right for X button */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Dot + (actor/date stacked) layout; prevent overlap */
+.event-detail-header .sub {
+  display: grid;
+  grid-template-columns: 16px 1fr;  /* dot | text */
+  grid-template-rows: auto auto;    /* actor row, date row */
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: start;
+  width: 100%;
+}
+
+/* reset any inherited floats/inline quirks */
+.event-detail-header .sub > span {
+  display: block;
+  position: static;
+}
+
+/* dot sits on the left spanning both rows */
+.event-detail-header .sub .legend-square {
+  grid-column: 1 / 2;
+  grid-row: 1 / span 2;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.15);
+  float: none;                      /* hard reset, just in case */
+}
+
+/* actor on first row, wraps cleanly */
+.event-detail-header .sub .actor {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+  margin: 0;
+}
+
+/* date on second row, below actor */
+.event-detail-header .sub .date {
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+/* tx line stays below the sub block and wraps */
+.event-detail-header .txline {
+  margin-top: 2px;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
+}
+.event-detail-header .txline a {
+  color: #7aa2ff;
+  text-decoration: underline;
+}
+
+
+
+
+/* body scroll area */
+.event-detail-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.event-detail-section:last-child {
+  border-bottom: 0;
+}
+
+/* section titles with subtle underline */
+.event-detail-section h4,
+.event-detail-section h5 {
+  margin: 0 0 10px 0;
+  font-weight: 700;
+  color: #e8eaee;
   position: relative;
 }
-.event-detail-section h4::after {
+.event-detail-section h4::after,
+.event-detail-section h5::after {
   content: "";
-  position: absolute;
-  bottom: -0.3rem;
-  left: 0;
-  width: 36px;
-  height: 3px;
-  background: #1e90ff;
+  display: block;
+  width: 48px;
+  height: 2px;
+  background: #3b82f6;
   border-radius: 2px;
+  margin-top: 6px;
+  opacity: 0.9;
 }
 
-/* 6. Field list layout */
-.field-list {
+/* key–value grid */
+.kv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+@media (max-width: 480px) {
+  .kv { grid-template-columns: 1fr; }
+}
+.kv div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;                      /* enable truncation */
+}
+.kv span { color: #b9bcc6; }
+.kv code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #101116;
+  border: 1px solid #252732;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #e8eaee;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* undernames list */
+.undername-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.undername-list li {
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 0.75rem;
-  row-gap: 0.5rem;
-  margin: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #13151b;
+  border: 1px solid #242632;
+  border-radius: 8px;
 }
-.field-list dt {
+.uname {
+  color: #e6e8ee;
   font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  color: #bbb;
 }
-.field-list dd {
-  margin: 0;
-  font-size: 0.95rem;
-  color: #e0e0e0;
-  word-break: break-word;
+.hash {
+  justify-self: end;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+
 
 
 
@@ -407,3 +606,83 @@
 .dot.updated-records    { background: blue; }
 .dot.removed-records    { background: red; }
 .dot.ant-extend-lease-event { background: #2baa99; }
+
+/* full-screen semi-opaque overlay */
+.loading-screen {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000; /* above everything else */
+}
+
+/* simple CSS spinner */
+.spinner {
+  width: 3rem;
+  height: 3rem;
+  border: 4px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.event-detail { display: flex; flex-direction: column; gap: 0.75rem; }
+.event-detail-header .sub { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.25rem; }
+.event-detail-header .txline { margin-top: 0.25rem; font-size: 0.9rem; opacity: 0.9; }
+.event-title { margin: 0; }
+
+.event-detail-section h4 { margin: 0.25rem 0 0.5rem; }
+.kv { display: grid; grid-template-columns: 1fr; gap: 0.4rem; }
+.kv div { display: flex; justify-content: space-between; gap: 0.5rem; }
+.kv span { color: #b9bcc6; }
+.kv code { overflow-wrap: anywhere; }
+
+.subsection h5 { margin: 0.75rem 0 0.25rem; font-size: 0.95rem; color: #cfd3dc; }
+.undername-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; }
+.undername-list li { display: flex; justify-content: space-between; gap: 0.5rem; }
+.uname { color: #e6e8ee; }
+.hash { opacity: 0.9; }
+.muted { opacity: 0.7; }
+
+
+.failure-view {
+  position: absolute;
+  inset: calc(var(--header-height) + 8px) 0 calc(var(--footer-height) + 0px) 0;
+  display: grid;
+  place-items: center;
+  z-index: 100; /* below your detail panel (which is 10050) */
+}
+
+.failure-card {
+  width: min(520px, 92vw);
+  background: linear-gradient(180deg, #1b1c22 0%, #15161b 100%);
+  border: 1px solid #2a2c36;
+  border-radius: 12px;
+  padding: 20px 22px;
+  color: #e5e7eb;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  text-align: left;
+}
+.failure-card h2 { margin: 0 0 8px 0; font-size: 1.25rem; }
+.failure-msg { margin: 0 0 14px 0; opacity: 0.9; }
+.failure-actions { display: flex; gap: 10px; }
+
+.failure-actions button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #2f3342;
+  background: #2a2f3f;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+.failure-actions button:hover { background: #31364a; }
+.failure-actions .ghost {
+  background: transparent;
+}
