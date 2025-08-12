@@ -1,5 +1,6 @@
 // src/pages/History/History.tsx
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import FailureView from './FailureView';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -19,12 +20,130 @@ import {
   StateNoticeEvent,
   SetRecordEvent,
 } from 'ao-js-sdk';
-import { from, forkJoin, of, Observable } from 'rxjs';
-import { switchMap, mergeMap, map } from 'rxjs/operators';
+import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
+import { switchMap, mergeMap, map, catchError } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
+function LoadingScreen() {
+  return (
+    <div className="loading-screen">
+      <div className="spinner" />
+    </div>
+  );
+}
 
+/* ===== Running ANT state (added) ===== */
+
+type ContentHashes = Record<string, string>;
+
+interface AntSnapshot {
+  owner: string;
+  controllers: string[];
+  expiryTs: number;
+  ttlSeconds: number;
+  processId?: string;
+  targetId?: string;
+  undernames: string[];       // include '@' for root if you use it
+  contentHashes: ContentHashes;
+}
+
+const initialSnapshot: AntSnapshot = {
+  owner: '',
+  controllers: [],
+  expiryTs: 0,
+  ttlSeconds: 0,
+  processId: undefined,
+  targetId: undefined,
+  undernames: [],
+  contentHashes: {},
+};
+
+const addUnique = (list: string[], item: string) =>
+  item && !list.includes(item) ? [...list, item] : list;
+
+// Pure, sync reducer – keeps this defensive, since SDK getters vary by event
+function applyEvent(prev: AntSnapshot, ev: IARNSEvent): AntSnapshot {
+  const e: any = ev;
+  switch (ev.constructor.name) {
+    case BuyNameEvent.name: {
+      const newOwner =
+        e.getBuyer?.() ??
+        e.getNewOwner?.() ??
+        e.getInitiator?.() ??
+        prev.owner;
+      const maybeControllers: string[] | undefined = e.getControllers?.();
+      return {
+        ...prev,
+        owner: newOwner,
+        controllers: maybeControllers ?? prev.controllers,
+        processId: e.getProcessId?.() ?? prev.processId,
+        targetId:  e.getTargetId?.()  ?? prev.targetId,
+        expiryTs:  e.getNewExpiry?.() ?? prev.expiryTs,
+        ttlSeconds: e.getTtlSeconds?.() ?? prev.ttlSeconds,
+      };
+    }
+
+    case ReassignNameEvent.name: {
+      const newOwner = e.getNewOwner?.() ?? e.getInitiator?.() ?? prev.owner;
+      return {
+        ...prev,
+        owner: newOwner,
+        processId: e.getProcessId?.() ?? prev.processId,
+        targetId:  e.getTargetId?.()  ?? prev.targetId,
+      };
+    }
+
+    case ReturnedNameEvent.name: {
+      const newOwner = e.getNewOwner?.() ?? '';
+      return { ...prev, owner: newOwner };
+    }
+
+    case ExtendLeaseEvent.name: {
+      const newExpiry = e.getNewExpiry?.() ?? prev.expiryTs;
+      const newTtl    = e.getTtlSeconds?.() ?? prev.ttlSeconds;
+      return { ...prev, expiryTs: newExpiry, ttlSeconds: newTtl };
+    }
+
+    case IncreaseUndernameEvent.name: {
+      const label = e.getUndername?.() ?? e.getName?.() ?? '';
+      return { ...prev, undernames: addUnique(prev.undernames, label) };
+    }
+
+    case RecordEvent.name:
+    case SetRecordEvent.name: {
+      const label = e.getUndername?.() ?? '@';
+      const hash  = e.getContentHash?.() ?? e.getRecordValue?.();
+      if (!hash) return prev;
+      return {
+        ...prev,
+        undernames: addUnique(prev.undernames, label),
+        contentHashes: {
+          ...prev.contentHashes,
+          [label]: String(hash),
+        },
+      };
+    }
+
+    case UpgradeNameEvent.name: {
+      return {
+        ...prev,
+        processId: e.getProcessId?.() ?? prev.processId,
+        targetId:  e.getTargetId?.()  ?? prev.targetId,
+      };
+    }
+
+    case StateNoticeEvent.name: {
+      // If this conveys concrete state, wire it here later
+      return prev;
+    }
+
+    default:
+      return prev;
+  }
+}
+
+/* ===== /running ANT state ===== */
 
 // The shape we render into cards
 export interface TimelineEvent {
@@ -34,6 +153,8 @@ export interface TimelineEvent {
   timestamp:  number;
   txHash:     string;
   rawEvent:   IARNSEvent;
+  // added (optional) so we can tuck the snapshot in when selected, without breaking callers
+  snapshot?:  AntSnapshot;
 }
 
 interface CurrentAntBarProps {
@@ -78,7 +199,7 @@ function CurrentAntBar({
           year: 'numeric', month: 'short', day: 'numeric'
         })}
       </span>
-      <span>Lease: {leaseDuration}</span>
+      <span>Lease: {leaseDuration }</span>
       <span>
         Process ID: <code>{processId.slice(0,5)}...</code>
       </span>
@@ -96,16 +217,25 @@ function CurrentAntBar({
   );
 }
 
-
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
+
+  const [retryToken, setRetryToken] = useState(0);
+  const doRetry = () => setRetryToken(t => t + 1);
+  
+  
   const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
-  // 🆕 selection state
+  // snapshots aligned 1:1 with events as they stream in
+  const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
+  // map first occurrence of txHash -> event index (so deduped cards still map to a snapshot)
+  const firstIndexByTxHashRef = useRef<Record<string, number>>({});
+
+  // selection state (kept as-is)
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
@@ -113,35 +243,40 @@ export default function History() {
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
-  
 
   // 1️⃣ Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // onClick only toggles selection
+  // onClick toggles selection; now also attaches snapshot (if known)
   const onCardClick = (evt: TimelineEvent) => {
-    setSelectedEvent(prev =>
-      prev?.txHash === evt.txHash ? null : evt
-    );
+    if (selectedEvent?.txHash === evt.txHash) {
+      setSelectedEvent(null);
+      return;
+    }
+    const idx = firstIndexByTxHashRef.current[evt.txHash];
+    const snap = Number.isInteger(idx) ? snapshots[idx] : undefined;
+    setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
   // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
     setAntError(null);
-    
+
     const service = ARIORewindService.autoConfiguration();
     service
       .getAntDetail(arnsname)
       .then(detail => setAntDetail(detail))
       .catch(err => setAntError(err.message || 'Failed to load ANT details'))
       .finally(() => setAntLoading(false));
-  }, [arnsname]);
+  }, [arnsname, retryToken]);
 
-  // fetch & stream history events (unchanged)
+  // fetch & stream history events; also build running snapshots (added)
   useEffect(() => {
     setEvents([]);
+    setSnapshots([]);
+    firstIndexByTxHashRef.current = {};
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
@@ -150,6 +285,11 @@ export default function History() {
     const sub = service
       .getEventHistory$(arnsname)
       .pipe(
+        catchError(err => {
+          setError(err?.message || 'Failed to load history');
+          return EMPTY; // stop the stream
+        }),
+        
         switchMap((raw: IARNSEvent[]) => from(raw)),
         mergeMap((e: IARNSEvent) => {
           let action: string, legendKey: string;
@@ -264,7 +404,24 @@ export default function History() {
         })
       )
       .subscribe({
-        next: (uiEvt: TimelineEvent) => setEvents(prev => [...prev, uiEvt]),
+        next: (uiEvt: TimelineEvent) => {
+          // append event
+          setEvents(prev => {
+            const nextIdx = prev.length; // index of this event as it streams in
+            // record first index for this txHash if not seen yet
+            if (firstIndexByTxHashRef.current[uiEvt.txHash] === undefined) {
+              firstIndexByTxHashRef.current[uiEvt.txHash] = nextIdx;
+            }
+            return [...prev, uiEvt];
+          });
+
+          // append its snapshot
+          setSnapshots(prevSnaps => {
+            const last = prevSnaps.length ? prevSnaps[prevSnaps.length - 1] : initialSnapshot;
+            const next = applyEvent(last, uiEvt.rawEvent);
+            return [...prevSnaps, next];
+          });
+        },
         error: err => {
           console.error(err);
           setError(err.message || 'Failed to load history');
@@ -274,10 +431,9 @@ export default function History() {
       });
 
     return () => sub.unsubscribe();
-  }, [arnsname]);
+  }, [arnsname, retryToken]);
 
-
-  // 3️⃣ After DOM update, pan/zoom to the newly-selected card
+  // After selection paints, pan/zoom to it (unchanged)
   useLayoutEffect(() => {
     if (!selectedEvent) return;
     const node = cardRefs.current[selectedEvent.txHash];
@@ -285,11 +441,38 @@ export default function History() {
       transformRef.current.zoomToElement(node, 300);
     }
   }, [selectedEvent]);
-  
-  
+// Before your normal render of chain etc.
+if (!antLoading && (antError || !antDetail)) {
+  return (
+    <div className="history">
+      <FailureView
+        title="Couldn’t load ANT details"
+        message={antError || 'The name may not exist, or the gateway is unavailable.'}
+        onRetry={doRetry}
+        onHome={() => navigate('/')}
+      />
+    </div>
+  );
+}
 
-  if (loading) return <div className="loading">Loading history…</div>;
-  if (error)   return <div className="error">{error}</div>;
+if (!loading && (error || events.length === 0)) {
+  return (
+    <div className="history">
+      <FailureView
+        title={error ? 'Couldn’t load history' : 'No history yet'}
+        message={
+          error
+            ? error
+            : 'We couldn’t find any events for this name. Try another name or retry.'
+        }
+        onRetry={doRetry}
+        onHome={() => navigate('/')}
+      />
+    </div>
+  );
+}
+  if (antLoading) return <LoadingScreen />;
+  if (loading)    return <div className="loading">Loading history…</div>;
 
   const uniqueMap = new Map<string, TimelineEvent>();
   events.forEach(evt => {
@@ -298,46 +481,47 @@ export default function History() {
     }
   });
 
-
-  // Build the timeline cards & make them clickable
+  // Build the timeline cards & make them clickable (unchanged)
   const timelineEvents = Array.from(uniqueMap.values())
-  .sort((a, b) => a.timestamp - b.timestamp)
-  .map((st, i) => {
-    const isSelected = selectedEvent?.txHash === st.txHash;
-    return {
-      key: `${st.txHash}-${i}`,
-      content: (
-        <div
-          className={`chain-card clickable${isSelected ? ' selected' : ''}`}
-          ref={el => { cardRefs.current[st.txHash] = el; }}
-          onClick={() => onCardClick(st)}
-        >
-          <div className="chain-card-header">
-            <span className="action-text">{st.action}</span>
-            <span className="actor">Actor: {st.actor.slice(0,5)}</span>
-            <span className={`legend-square ${st.legendKey}`}></span>
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((st, i) => {
+      const isSelected = selectedEvent?.txHash === st.txHash;
+      return {
+        key: `${st.txHash}-${i}`,
+        content: (
+          <div
+            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+            ref={el => { cardRefs.current[st.txHash] = el; }}
+            onClick={() => onCardClick(st)}
+          >
+            <div className="chain-card-header">
+              <span className="action-text">{st.action}</span>
+              <span className="actor">Actor: {st.actor.slice(0,5)}</span>
+              <span className={`legend-square ${st.legendKey}`}></span>
+            </div>
+            <hr />
+            <div className="chain-card-footer">
+              <span className="date">
+                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                  year: 'numeric', month: 'short', day: 'numeric'
+                })}
+              </span>
+              <span className="txid">
+                <a
+                  href={`https://www.ao.link/#/message/${st.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {st.txHash}
+                </a>
+              </span>
+            </div>
           </div>
-          <hr />
-          <div className="chain-card-footer">
-            <span className="date">
-              {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
-                year: 'numeric', month: 'short', day: 'numeric'
-              })}
-            </span>
-            <span className="txid">
-              <a
-                href={`https://www.ao.link/#/message/${st.txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {st.txHash}
-              </a>
-            </span>
-          </div>
-        </div>
-      )
-    };
-  });
+        )
+      };
+    });
+
+
 
   return (
     <div className="history">
@@ -380,14 +564,12 @@ export default function History() {
       </div>
 
       {/* Fixed ANT Bar */}
-      {antLoading && <div className="loading">Loading ANT details…</div>}
-      {antError   && <div className="error">{antError}</div>}
       {antDetail  && (
         <CurrentAntBar
           name={antDetail.name}
           expiryTs={antDetail.endTimestamp}
           leaseDuration={antDetail.type === 'lease'
-            ? `${Math.floor((antDetail.endTimestamp - antDetail.startTimestamp) / (60 * 60 * 24 * 365))} years`
+            ? `${Math.floor(Number(antDetail.leaseDuration) / (60 * 60 * 24 * 365 * 1000))} years`
             : antDetail.type}
           processId={antDetail.processId}
           controllers={antDetail.controllers}
@@ -398,9 +580,8 @@ export default function History() {
           targetId={antDetail.targetId} 
           undernameLimit={antDetail.undernameLimit} 
           expiryDate={antDetail.expiryDate} 
-
           onBack={() => navigate(-2)} 
-          />
+        />
       )}
 
       {/* Draggable chain */}
@@ -442,25 +623,21 @@ export default function History() {
         </TransformWrapper>
       </div>
 
-      {/* 🆕 Detail pop‑up */}
+      {/* Detail pop-up (unchanged signature – uiEvent only) */}
       {selectedEvent && (
         <div
           ref={detailRef}
           className="detailed-card"
         >
-          {/* close button */}
           <button
             className="close-btn"
             onClick={() => setSelectedEvent(null)}
           >
             ×
           </button>
-
-          {/* dispatch to the per‑event detail component */}
           <EventDetails uiEvent={selectedEvent} />
         </div>
       )}
-
     </div>
   );
 }
