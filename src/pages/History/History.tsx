@@ -21,7 +21,7 @@ import {
   SetRecordEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
-import { switchMap, mergeMap, map, catchError } from 'rxjs/operators';
+import { switchMap, mergeMap, map, catchError, concatMap } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
@@ -33,115 +33,206 @@ function LoadingScreen() {
   );
 }
 
-/* ===== Running ANT state (added) ===== */
+/** Wrap a sync value or Promise into an Observable (undefined-safe). */
+function toObs<T>(v: T | Promise<T> | undefined): Observable<T | undefined> {
+  if (v === undefined) return of(undefined as T | undefined);
+  // Force to Promise to normalize sync/async, then "from" it.
+  return from(Promise.resolve(v));
+}
 
+/** Remove keys whose value is strictly undefined (keeps null). */
+function stripUndef<T extends Record<string, any>>(o: T): Partial<T> {
+  const entries = Object.entries(o).filter(([, v]) => v !== undefined);
+  return Object.fromEntries(entries) as Partial<T>;
+}
+
+/** Pick the first non-undefined value. */
+function firstDefined<T>(...vals: Array<T | undefined>): T | undefined {
+  for (const v of vals) if (v !== undefined) return v;
+  return undefined;
+}
+
+// ---------- Running snapshot shapes ----------
 type ContentHashes = Record<string, string>;
 
-interface AntSnapshot {
+export interface AntSnapshot {
   owner: string;
   controllers: string[];
   expiryTs: number;
   ttlSeconds: number;
   processId?: string;
   targetId?: string;
-  undernames: string[];       // include '@' for root if you use it
+  undernames: string[];
   contentHashes: ContentHashes;
+  description?: string;
+  ticker?: string;
+  keywords?: string[];
 }
 
-const initialSnapshot: AntSnapshot = {
-  owner: '',
-  controllers: [],
+export const initialSnapshot: AntSnapshot = {
+  owner: 'initial',
+  controllers: ['initial', 'initial2', 'initial3'],
   expiryTs: 0,
   ttlSeconds: 0,
-  processId: undefined,
-  targetId: undefined,
-  undernames: [],
-  contentHashes: {},
+  processId: 'initial',
+  targetId: 'initial',
+  undernames: ['initial', 'initial2', 'initial3'],
+  contentHashes: { initial: 'initial' },
+  description: 'initial',
+  ticker: 'initial',
+  keywords: ['initial', 'initial2', 'initial3'],
 };
 
-const addUnique = (list: string[], item: string) =>
-  item && !list.includes(item) ? [...list, item] : list;
+type SnapshotDelta = Partial<AntSnapshot>;
 
-// Pure, sync reducer – keeps this defensive, since SDK getters vary by event
-function applyEvent(prev: AntSnapshot, ev: IARNSEvent): AntSnapshot {
-  const e: any = ev;
+function uniq(arr: string[] = []) { return Array.from(new Set(arr)); }
+
+/**
+ * Default behavior:
+ *  - arrays are UNIONed
+ *  - objects (contentHashes) are MERGED (prev ... delta)
+ * If opts.authoritative === true:
+ *  - arrays are REPLACED
+ *  - objects are REPLACED
+ */
+function applyDelta(
+  prev: AntSnapshot,
+  delta: Partial<AntSnapshot>,
+  opts?: { authoritative?: boolean }
+): AntSnapshot {
+  const replace = !!opts?.authoritative;
+
+  const nextControllers = delta.controllers
+    ? (replace ? delta.controllers : uniq([...(prev.controllers ?? []), ...delta.controllers]))
+    : prev.controllers;
+
+  const nextUndernames = delta.undernames
+    ? (replace ? delta.undernames : uniq([...(prev.undernames ?? []), ...delta.undernames]))
+    : prev.undernames;
+
+  const nextKeywords = delta.keywords
+    ? (replace ? delta.keywords : uniq([...(prev.keywords ?? []), ...delta.keywords]))
+    : prev.keywords;
+
+  const nextContentHashes = delta.contentHashes
+    ? (replace ? delta.contentHashes : { ...(prev.contentHashes ?? {}), ...delta.contentHashes })
+    : prev.contentHashes;
+
+  return {
+    ...prev,
+    ...delta, // scalar fields (owner, expiryTs, ttlSeconds, processId, targetId, description, ticker)
+    controllers: nextControllers ?? [],
+    undernames: nextUndernames ?? [],
+    contentHashes: nextContentHashes ?? {},
+    keywords: nextKeywords, // may be undefined if you don't use it
+  };
+}
+
+
+/** Resolve only the fields you want to carry forward for each event type. */
+function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
   switch (ev.constructor.name) {
+    case StateNoticeEvent.name: {
+      const e = ev as StateNoticeEvent;
+      const records$ = toObs(e.getRecords?.());
+      const contentHashes$ = records$.pipe(map(records => Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))));
+      const undernames$ = records$.pipe(map(records => Object.keys(records)));
+      console.log(records$);
+      return forkJoin({
+        owner:       toObs(e.getOwner?.()),
+        controllers: toObs(e.getControllers?.()),
+        processId:   toObs(e.getANTProcessId?.()),
+        expiryTs:    toObs((e as any).getNewExpiry?.()),
+        description: toObs(e.getDescription?.()),
+        ticker:      toObs(e.getTicker?.()),
+        keywords:    toObs(e.getKeywords?.()),
+        // If available in your SDK, add:
+        contentHashes: contentHashes$,
+        undernames:    undernames$,
+      }).pipe(map(stripUndef));
+    }
+
     case BuyNameEvent.name: {
-      const newOwner =
-        e.getBuyer?.() ??
-        e.getNewOwner?.() ??
-        e.getInitiator?.() ??
-        prev.owner;
-      const maybeControllers: string[] | undefined = e.getControllers?.();
-      return {
-        ...prev,
-        owner: newOwner,
-        controllers: maybeControllers ?? prev.controllers,
-        processId: e.getProcessId?.() ?? prev.processId,
-        targetId:  e.getTargetId?.()  ?? prev.targetId,
-        expiryTs:  e.getNewExpiry?.() ?? prev.expiryTs,
-        ttlSeconds: e.getTtlSeconds?.() ?? prev.ttlSeconds,
-      };
+      const e = ev as BuyNameEvent;
+      return forkJoin({
+        ownerBuyer: toObs((e as any).getBuyer?.()),
+        initiator:  toObs(e.getInitiator?.()),
+        processId:  toObs((e as any).getProcessId?.()),
+        leaseEnd:   toObs((e as any).getLeaseEnd?.()),
+        newExpiry:  toObs((e as any).getNewExpiry?.()),
+      }).pipe(
+        map(res =>
+          stripUndef({
+            owner:     firstDefined(res.ownerBuyer, res.initiator),
+            processId: res.processId,
+            expiryTs:  firstDefined(res.leaseEnd, res.newExpiry),
+          })
+        )
+      );
     }
 
     case ReassignNameEvent.name: {
-      const newOwner = e.getNewOwner?.() ?? e.getInitiator?.() ?? prev.owner;
-      return {
-        ...prev,
-        owner: newOwner,
-        processId: e.getProcessId?.() ?? prev.processId,
-        targetId:  e.getTargetId?.()  ?? prev.targetId,
-      };
-    }
-
-    case ReturnedNameEvent.name: {
-      const newOwner = e.getNewOwner?.() ?? '';
-      return { ...prev, owner: newOwner };
+      const e = ev as ReassignNameEvent;
+      return forkJoin({
+        newOwner:  toObs((e as any).getNewOwner?.()),
+        initiator: toObs(e.getInitiator?.()),
+        processId: toObs((e as any).getProcessId?.()),
+      }).pipe(
+        map(res =>
+          stripUndef({
+            owner: firstDefined(res.newOwner, res.initiator),
+            processId: res.processId,
+          })
+        )
+      );
     }
 
     case ExtendLeaseEvent.name: {
-      const newExpiry = e.getNewExpiry?.() ?? prev.expiryTs;
-      const newTtl    = e.getTtlSeconds?.() ?? prev.ttlSeconds;
-      return { ...prev, expiryTs: newExpiry, ttlSeconds: newTtl };
+      const e = ev as ExtendLeaseEvent;
+      return forkJoin({
+        leaseEnd:  toObs((e as any).getLeaseEnd?.()),
+        newExpiry: toObs((e as any).getNewExpiry?.()),
+      }).pipe(map(res => stripUndef({ expiryTs: firstDefined(res.leaseEnd, res.newExpiry) })));
     }
 
     case IncreaseUndernameEvent.name: {
-      const label = e.getUndername?.() ?? e.getName?.() ?? '';
-      return { ...prev, undernames: addUnique(prev.undernames, label) };
+      // Adapt when you know what the SDK exposes here
+      // e.g., const label$ = toObs((e as any).getUndername?.())
+      return of({} as SnapshotDelta);
     }
 
     case RecordEvent.name:
     case SetRecordEvent.name: {
-      const label = e.getUndername?.() ?? '@';
-      const hash  = e.getContentHash?.() ?? e.getRecordValue?.();
-      if (!hash) return prev;
-      return {
-        ...prev,
-        undernames: addUnique(prev.undernames, label),
-        contentHashes: {
-          ...prev.contentHashes,
-          [label]: String(hash),
-        },
-      };
+      const e = ev as RecordEvent | SetRecordEvent;
+      // Example (uncomment/adapt when you know exact getters):
+      // const label$ = toObs((e as any).getLabel?.());
+      // const key$   = toObs((e as any).getKey?.());
+      // const val$   = toObs((e as any).getValue?.());
+      // return forkJoin({ label: label$, key: key$, val: val$ }).pipe(
+      //   map(({ label, key, val }) => (key === 'contenthash' && label && val)
+      //     ? { contentHashes: { [label]: val } }
+      //     : {}
+      //   )
+      // );
+      return of({} as SnapshotDelta);
     }
 
     case UpgradeNameEvent.name: {
-      return {
-        ...prev,
-        processId: e.getProcessId?.() ?? prev.processId,
-        targetId:  e.getTargetId?.()  ?? prev.targetId,
-      };
+      // Add process/target adjustments if exposed
+      return of({} as SnapshotDelta);
     }
 
-    case StateNoticeEvent.name: {
-      // If this conveys concrete state, wire it here later
-      return prev;
+    case ReturnedNameEvent.name: {
+      // Optionally clear owner/etc if your UX wants that
+      return of({} as SnapshotDelta);
     }
 
     default:
-      return prev;
+      return of({} as SnapshotDelta);
   }
 }
+
+
 
 /* ===== /running ANT state ===== */
 
@@ -272,7 +363,6 @@ export default function History() {
       .finally(() => setAntLoading(false));
   }, [arnsname, retryToken]);
 
-  // fetch & stream history events; also build running snapshots (added)
   useEffect(() => {
     setEvents([]);
     setSnapshots([]);
@@ -280,156 +370,76 @@ export default function History() {
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
-
+  
+    // Running snapshot lives in the effect (sequentially updated)
+    let snap: AntSnapshot = initialSnapshot;
+  
     const service = ARIORewindService.autoConfiguration();
     const sub = service
       .getEventHistory$(arnsname)
       .pipe(
         catchError(err => {
           setError(err?.message || 'Failed to load history');
-          return EMPTY; // stop the stream
+          return EMPTY;
         }),
-        
         switchMap((raw: IARNSEvent[]) => from(raw)),
-        mergeMap((e: IARNSEvent) => {
-          let action: string, legendKey: string;
-          let actor$: Observable<string> = of('');
-          let timestamp$: Observable<number> = of(Date.now());
-          let txHash$: Observable<string> = of('');
-
+  
+        // Important: keep temporal order
+        concatMap((e: IARNSEvent) => {
+          // Resolve the small-card UI fields correctly (await getters)
+          const actor$     = toObs(e.getInitiator?.());
+          const timestamp$ = toObs(e.getEventTimeStamp?.());
+          const txHash$    = toObs(e.getEventMessageId?.());
+  
+          let action = 'Unknown Event';
+          let legendKey = 'multiple-changes';
           switch (e.constructor.name) {
-            case BuyNameEvent.name: {
-              const ev = e as BuyNameEvent;
-              action    = 'Purchased ANT Name';
-              legendKey = 'ant-buy-event';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case ReassignNameEvent.name: {
-              const ev = e as ReassignNameEvent;
-              action    = 'Reassigned ANT Name';
-              legendKey = 'ant-reassign-event';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case ExtendLeaseEvent.name: {
-              const ev = e as ExtendLeaseEvent;
-              action    = 'Extended Lease';
-              legendKey = 'ant-extend-lease-event';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case ReturnedNameEvent.name: {
-              const ev = e as ReturnedNameEvent;
-              action    = 'Returned ANT Name';
-              legendKey = 'ant-return-event';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case ExtendLeaseEvent.name: {
-              const ev = e as ExtendLeaseEvent;
-              action    = 'Renewed ANT Name';
-              legendKey = 'ant-renewal';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case IncreaseUndernameEvent.name: {
-              const ev = e as IncreaseUndernameEvent;
-              action    = 'Added undername';
-              legendKey = 'undername-creation';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case RecordEvent.name: {
-              const ev = e as RecordEvent;
-              action    = 'Changed page contents';
-              legendKey = 'ant-content-change';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case SetRecordEvent.name: {
-              const ev = e as SetRecordEvent;
-              action    = 'Set Record';
-              legendKey = 'ant-content-change';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case UpgradeNameEvent.name: {
-              const ev = e as UpgradeNameEvent;
-              action    = 'Upgraded ANT Name';
-              legendKey = 'ant-upgrade-event';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            case StateNoticeEvent.name: {
-              const ev = e as StateNoticeEvent;
-              action    = 'State Notice';
-              legendKey = 'ant-state-change';
-              actor$    = of(ev.getInitiator());
-              timestamp$= of(ev.getEventTimeStamp());
-              txHash$   = of(ev.getEventMessageId());
-              break;
-            }
-            default: {
-              console.warn('Unknown event:', e.constructor.name);
-              action    = 'Unknown Event';
-              legendKey = 'multiple-changes';
-              actor$    = of(e.getInitiator());
-              timestamp$= of(e.getEventTimeStamp());
-              txHash$   = of(e.getEventMessageId());
-            }
+            case BuyNameEvent.name:           action = 'Purchased ANT Name';     legendKey = 'ant-buy-event';          break;
+            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';    legendKey = 'ant-reassign-event';     break;
+            case ReturnedNameEvent.name:      action = 'Returned ANT Name';      legendKey = 'ant-return-event';       break;
+            case ExtendLeaseEvent.name:       action = 'Extended Lease';         legendKey = 'ant-extend-lease-event'; break;
+            case IncreaseUndernameEvent.name: action = 'Added undername';        legendKey = 'undername-creation';     break;
+            case RecordEvent.name:            action = 'Changed page contents';  legendKey = 'ant-content-change';     break;
+            case SetRecordEvent.name:         action = 'Set Record';             legendKey = 'ant-content-change';     break;
+            case UpgradeNameEvent.name:       action = 'Upgraded ANT Name';      legendKey = 'ant-upgrade-event';      break;
+            case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
           }
-
-          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$ }).pipe(
-            map(({ actor, timestamp, txHash }) => ({ action, actor, legendKey, timestamp, txHash, rawEvent: e } as TimelineEvent))
+          console.log(e);
+  
+          const delta$ = computeDelta$(e);
+  
+          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
+            map(({ actor, timestamp, txHash, delta }) => {
+              snap = applyDelta(snap, delta); // sequentially apply Delta → Snapshot
+  
+              return {
+                action,
+                actor: actor ?? '',
+                legendKey,
+                timestamp: timestamp ?? 0,
+                txHash: txHash ?? '',
+                rawEvent: e,
+                snapshot: snap, // snapshot as-of this event
+              } as TimelineEvent;
+            })
           );
         })
       )
       .subscribe({
         next: (uiEvt: TimelineEvent) => {
-          // append event
           setEvents(prev => {
-            const nextIdx = prev.length; // index of this event as it streams in
-            // record first index for this txHash if not seen yet
+            const idx = prev.length;
             if (firstIndexByTxHashRef.current[uiEvt.txHash] === undefined) {
-              firstIndexByTxHashRef.current[uiEvt.txHash] = nextIdx;
+              firstIndexByTxHashRef.current[uiEvt.txHash] = idx;
             }
             return [...prev, uiEvt];
           });
-
-          // append its snapshot
-          setSnapshots(prevSnaps => {
-            const last = prevSnaps.length ? prevSnaps[prevSnaps.length - 1] : initialSnapshot;
-            const next = applyEvent(last, uiEvt.rawEvent);
-            return [...prevSnaps, next];
-          });
-        },
-        error: err => {
-          console.error(err);
-          setError(err.message || 'Failed to load history');
-          setLoading(false);
+          setSnapshots(prev => [...prev, uiEvt.snapshot!]);
         },
         complete: () => setLoading(false),
+        error: () => setLoading(false),
       });
-
+  
     return () => sub.unsubscribe();
   }, [arnsname, retryToken]);
 
@@ -455,7 +465,7 @@ if (!antLoading && (antError || !antDetail)) {
   );
 }
 
-if (!loading && (error || events.length === 0)) {
+if (!loading && (error || events.length < 1)) {
   return (
     <div className="history">
       <FailureView
