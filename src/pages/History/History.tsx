@@ -71,16 +71,16 @@ export interface AntSnapshot {
 }
 
 export const initialSnapshot: AntSnapshot = {
-  owner: 'initial',
+  owner: '',
   controllers: [],
   expiryTs: 0,
   ttlSeconds: 0,
-  processId: 'initial',
-  targetId: 'initial',
+  processId: '',
+  targetId: '',
   undernames: [],
   contentHashes: {},
-  description: 'initial',
-  ticker: 'initial',
+  description: '',
+  ticker: 'ANT',
   keywords: [],
 };
 
