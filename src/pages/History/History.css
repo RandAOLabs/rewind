@@ -161,7 +161,7 @@
   position: absolute;
   top: calc(var(--header-height) + var(--current-ant-height) + 8px);
   right: 12px;
-  bottom: calc(var(--footer-height) + 12px);
+  bottom: 0;
   width: 420px;
   max-width: calc(100vw - 24px);
   background: linear-gradient(180deg, #191a1f 0%, #14151a 100%);
@@ -170,8 +170,8 @@
   box-shadow: -8px 0 24px rgba(0,0,0,0.45);
   color: #e5e7eb;
   display: flex;
-  overflow: hidden;                         /* single scroll area inside */
   z-index: 10050;
+  overflow: hidden;
 }
 
 /* sticky close button in the top-right of the card */
@@ -200,6 +200,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
 }
 
 /* Header sticks to top while body scrolls */
@@ -210,6 +211,7 @@
   background: linear-gradient(180deg, #191a1f 0%, #17181d 100%);
   padding: 16px 16px 10px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
+  line-height: .95;
 }
 
 /* Title + spacing */
@@ -262,6 +264,7 @@
   display: block;
   margin-top: 2px;
   opacity: 0.9;
+  line-height: 1;
 }
     
 /* tx line below sub, with clean wrapping */
@@ -351,9 +354,16 @@
 .event-detail-section {
   padding: 14px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  min-height: 0;
 }
+
 .event-detail-section:last-child {
   border-bottom: 0;
+  flex-direction: column;
+  flex: 1 1 auto;   /* <-- claim remaining height */
+  min-height: 0;    /* <-- allow child overflow-y to work */
+  overflow: hidden; /* keep the scroller inside */
+  display: flex;
 }
 
 /* section titles with subtle underline */
@@ -405,38 +415,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* undernames list */
-.undername-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
-.undername-list li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: #13151b;
-  border: 1px solid #242632;
-  border-radius: 8px;
-}
-.uname {
-  color: #e6e8ee;
-  font-weight: 600;
-}
-.hash {
-  justify-self: end;
-  max-width: 230px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
 
 
 
@@ -633,7 +611,7 @@
   to { transform: rotate(360deg); }
 }
 
-.event-detail { display: flex; flex-direction: column; gap: 0.75rem; }
+.event-detail { display: flex; flex-direction: column; gap: 0.75rem;   min-height: 0;   flex: 1 1 auto; }
 .event-detail-header .sub { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.25rem; }
 .event-detail-header .txline { margin-top: 0.25rem; font-size: 0.9rem; opacity: 0.9; }
 .event-title { margin: 0; }
@@ -645,11 +623,9 @@
 .kv code { overflow-wrap: anywhere; }
 
 .subsection h5 { margin: 0.75rem 0 0.25rem; font-size: 0.95rem; color: #cfd3dc; }
-.undername-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; }
-.undername-list li { display: flex; justify-content: space-between; gap: 0.5rem; }
-.uname { color: #e6e8ee; }
-.hash { opacity: 0.9; }
-.muted { opacity: 0.7; }
+
+
+
 
 
 .failure-view {
@@ -686,4 +662,99 @@
 .failure-actions button:hover { background: #31364a; }
 .failure-actions .ghost {
   background: transparent;
+}
+
+
+
+/* your "Undernames & Content" block should take remaining height */
+.subsection {
+  display: flex;
+  padding: 16px 0px;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;     /* allow the scroll area below to size */
+}
+
+/* ─── Scrollable area around the list (single vertical scroller) ─── */
+.undername-scroll {
+  flex: 1 1 auto;    /* fill to bottom */
+  min-height: 0;
+  margin-top: 8px;
+  padding-right: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+
+  /* hide scrollbars, keep scroll behavior */
+  -ms-overflow-style: none;    /* IE/Edge */
+  scrollbar-width: none;       /* Firefox */
+}
+.undername-scroll::-webkit-scrollbar { display: none; }
+
+/* ─── List layout inside the scroll area ─── */
+.undername-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  display: grid;
+  grid-auto-rows: minmax(26px, auto);
+  row-gap: 8px;
+}
+
+/* each record as a boxed row */
+.undername-list li {
+  display: grid;
+  grid-template-columns: 1fr auto; /* name | hash */
+  align-items: center;
+  column-gap: 10px;
+
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.undername-list li:hover {
+  border-color: rgba(123, 167, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+
+/* left label */
+.undername-list .uname {
+  font-weight: 600;
+  color: #e5e7eb;
+  min-width: 0;                 /* enable ellipsis */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* right hash (monospace, truncated, link colored) */
+.undername-list .hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undername-list .hash a {
+  color: #7aa2ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

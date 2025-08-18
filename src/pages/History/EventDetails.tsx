@@ -19,8 +19,10 @@ type DetailEvent = {
   };
 };
 
+const shorten = (s?: string, n = 5) => (s ? `${s.slice(0, n)}…` : '—');
+
 export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
-  const snap = uiEvent.snapshot; // may be undefined for a moment
+  const snap = uiEvent.snapshot; // may be undefined briefly
 
   return (
     <div className="event-detail">
@@ -30,7 +32,6 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
         <div className="sub">
           <span className={`legend-square ${uiEvent.legendKey}`} />
           <span className="actor">Actor: {uiEvent.actor}</span>
-
           <span className="date">
             {new Date(uiEvent.timestamp * 1000).toLocaleString()}
           </span>
@@ -42,10 +43,9 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            {uiEvent.txHash}
+            {shorten(uiEvent.txHash)}
           </a>
         </div>
-
       </div>
 
       {/* State snapshot */}
@@ -57,37 +57,119 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
         ) : (
           <>
             <div className="kv">
-              <div><span>Owner</span><code>{snap.owner || '—'}</code></div>
-              <div><span>Controllers</span>
-                <code>{snap.controllers?.length ? snap.controllers.join(', ') : '—'}</code>
+              <div>
+                <span>Owner</span>
+                <code>
+                  {snap.owner ? (
+                    <a
+                      href={`https://www.ao.link/#/entity/${snap.owner}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {shorten(snap.owner)}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </code>
               </div>
-              <div><span>Expiry</span>
+
+              <div>
+                <span>Controllers</span>
+                <code>
+                  {snap.controllers?.length ? (
+                    snap.controllers.map((c, idx) => (
+                      <React.Fragment key={c || idx}>
+                        <a
+                          href={`https://www.ao.link/#/entity/${c}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {shorten(c)}
+                        </a>
+                        {idx < snap.controllers.length - 1 ? ', ' : ''}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    '—'
+                  )}
+                </code>
+              </div>
+
+              <div>
+                <span>Expiry</span>
                 <code>
                   {snap.expiryTs
                     ? new Date(snap.expiryTs * 1000).toLocaleDateString()
                     : '—'}
                 </code>
               </div>
-              <div><span>TTL (s)</span><code>{snap.ttlSeconds ?? 0}</code></div>
+
+              <div>
+                <span>TTL (s)</span>
+                <code>{snap.ttlSeconds ?? 0}</code>
+              </div>
+
               {snap.processId && (
-                <div><span>Process ID</span><code>{snap.processId}</code></div>
+                <div>
+                  <span>Process ID</span>
+                  <code>
+                    <a
+                      href={`https://www.ao.link/#/entity/${snap.processId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {shorten(snap.processId)}
+                    </a>
+                  </code>
+                </div>
               )}
+
               {snap.targetId && (
-                <div><span>Target ID</span><code>{snap.targetId}</code></div>
+                <div>
+                  <span>Target ID</span>
+                  <code>
+                    <a
+                      href={`ar://${snap.targetId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {shorten(snap.targetId)}
+                    </a>
+                  </code>
+                </div>
               )}
             </div>
-
+              
             <div className="subsection">
-              <h5>Undernames & Content</h5>
+              <h4>Undernames & Content</h4>
               {snap.undernames?.length ? (
+                  <div className="undername-scroll">
+
                 <ul className="undername-list">
-                  {snap.undernames.map((u) => (
-                    <li key={u}>
-                      <span className="uname">{u}</span>
-                      <code className="hash">{snap.contentHashes?.[u] ?? '—'}</code>
-                    </li>
-                  ))}
+                  {snap.undernames.map((u) => {
+                    const h = snap.contentHashes?.[u];
+                    return (
+                      <li key={u}>
+                        <span className="uname">{u}</span>
+                        {h ? (
+                          <code className="hash">
+                            <a
+                              href={`ar://${h}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {shorten(h)}
+                            </a>
+                          </code>
+                        ) : (
+                          <code className="hash">—</code>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
+                </div>
               ) : (
                 <p className="muted">No undernames yet.</p>
               )}
