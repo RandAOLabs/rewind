@@ -28,7 +28,7 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0 1rem;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: #fff;
   z-index: 100100;
   border-top: 1px solid #222;
@@ -159,8 +159,8 @@
 /* ---- Detailed panel container ---- */
 .detailed-card {
   position: absolute;
-  top: calc(var(--header-height) + var(--current-ant-height) + 8px);
-  right: 12px;
+  top: calc(var(--header-height) + var(--current-ant-height));
+  right: 0;
   bottom: 0;
   width: 420px;
   max-width: calc(100vw - 24px);

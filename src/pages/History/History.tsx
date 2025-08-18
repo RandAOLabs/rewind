@@ -19,6 +19,7 @@ import {
   ARNameDetail,
   StateNoticeEvent,
   SetRecordEvent,
+  CreditNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
 import { switchMap, mergeMap, map, catchError, concatMap } from 'rxjs/operators';
@@ -293,7 +294,7 @@ function CurrentAntBar({
           year: 'numeric', month: 'short', day: 'numeric'
         })}
       </span>
-      <span>Lease: {leaseDuration }</span>
+      {/* <span>Lease: {leaseDuration }</span> */}
       <span>
         Process ID: <code>{processId.slice(0,5)}...</code>
       </span>
@@ -406,6 +407,7 @@ export default function History() {
             case SetRecordEvent.name:         action = 'Set Record';             legendKey = 'ant-content-change';     break;
             case UpgradeNameEvent.name:       action = 'Upgraded ANT Name';      legendKey = 'ant-upgrade-event';      break;
             case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
+            case CreditNoticeEvent.name:      action = 'Credit Notice';          legendKey = 'ant-credit-notice';      break;
           }
   
           const delta$ = computeDelta$(e);
