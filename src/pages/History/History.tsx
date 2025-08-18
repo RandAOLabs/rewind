@@ -22,7 +22,7 @@ import {
   CreditNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
-import { switchMap, mergeMap, map, catchError, concatMap } from 'rxjs/operators';
+import { switchMap, mergeMap, map, catchError, concatMap, toArray } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
@@ -37,7 +37,6 @@ function LoadingScreen() {
 /** Wrap a sync value or Promise into an Observable (undefined-safe). */
 function toObs<T>(v: T | Promise<T> | undefined): Observable<T | undefined> {
   if (v === undefined) return of(undefined as T | undefined);
-  // Force to Promise to normalize sync/async, then "from" it.
   return from(Promise.resolve(v));
 }
 
@@ -125,10 +124,9 @@ function applyDelta(
     controllers: nextControllers ?? [],
     undernames: nextUndernames ?? [],
     contentHashes: nextContentHashes ?? {},
-    keywords: nextKeywords, // may be undefined if you don't use it
+    keywords: nextKeywords,
   };
 }
-
 
 /** Resolve only the fields you want to carry forward for each event type. */
 function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
@@ -136,11 +134,18 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     case StateNoticeEvent.name: {
       const e = ev as StateNoticeEvent;
       const records$ = toObs(e.getRecords?.());
-      const contentHashes$ = records$.pipe(map(records => Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))));
-      const undernames$ = records$.pipe(map(records => Object.keys(records)));
-      const target$ = toObs(e.getRecords?.()).pipe(
-        map(records => records['@']?.transactionId),
+      const contentHashes$ = records$.pipe(
+        map(records =>
+          records
+            ? Object.fromEntries(
+                Object.entries(records).map(([k, v]: [string, any]) => [k, v?.transactionId])
+              )
+            : {}
+        )
       );
+      const undernames$ = records$.pipe(map(records => (records ? Object.keys(records) : [])));
+      const target$ = records$.pipe(map(records => records?.['@']?.transactionId));
+
       return forkJoin({
         owner:       toObs(e.getOwner?.()),
         targetId:    target$,
@@ -150,7 +155,6 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
         description: toObs(e.getDescription?.()),
         ticker:      toObs(e.getTicker?.()),
         keywords:    toObs(e.getKeywords?.()),
-        // If available in your SDK, add:
         contentHashes: contentHashes$,
         undernames:    undernames$,
       }).pipe(map(stripUndef));
@@ -200,34 +204,21 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     }
 
     case IncreaseUndernameEvent.name: {
-      // Adapt when you know what the SDK exposes here
-      // e.g., const label$ = toObs((e as any).getUndername?.())
+      // TODO: adapt when SDK exposes fields you need
       return of({} as SnapshotDelta);
     }
 
     case RecordEvent.name:
     case SetRecordEvent.name: {
-      const e = ev as RecordEvent | SetRecordEvent;
-      // Example (uncomment/adapt when you know exact getters):
-      // const label$ = toObs((e as any).getLabel?.());
-      // const key$   = toObs((e as any).getKey?.());
-      // const val$   = toObs((e as any).getValue?.());
-      // return forkJoin({ label: label$, key: key$, val: val$ }).pipe(
-      //   map(({ label, key, val }) => (key === 'contenthash' && label && val)
-      //     ? { contentHashes: { [label]: val } }
-      //     : {}
-      //   )
-      // );
+      // TODO: adapt when SDK exposes label/key/value
       return of({} as SnapshotDelta);
     }
 
     case UpgradeNameEvent.name: {
-      // Add process/target adjustments if exposed
       return of({} as SnapshotDelta);
     }
 
     case ReturnedNameEvent.name: {
-      // Optionally clear owner/etc if your UX wants that
       return of({} as SnapshotDelta);
     }
 
@@ -236,21 +227,19 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
   }
 }
 
+/* ===== Events & UI types ===== */
 
-
-/* ===== /running ANT state ===== */
-
-// The shape we render into cards
 export interface TimelineEvent {
   action:     string;
   actor:      string;
   legendKey:  string;
-  timestamp:  number;
+  timestamp:  number; // seconds (canonical)
   txHash:     string;
   rawEvent:   IARNSEvent;
-  // added (optional) so we can tuck the snapshot in when selected, without breaking callers
-  snapshot?:  AntSnapshot;
+  snapshot?:  AntSnapshot; // attached on selection or pre-attached after fold
 }
+
+type ResolvedForBuild = TimelineEvent & { delta: SnapshotDelta };
 
 interface CurrentAntBarProps {
   name: string;
@@ -316,34 +305,28 @@ export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
-
   const [retryToken, setRetryToken] = useState(0);
   const doRetry = () => setRetryToken(t => t + 1);
-  
-  
+
   const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
-  // snapshots aligned 1:1 with events as they stream in
+  // snapshots aligned 1:1 with events (already sorted)
   const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
-  // map first occurrence of txHash -> event index (so deduped cards still map to a snapshot)
+  // txHash -> first index
   const firstIndexByTxHashRef = useRef<Record<string, number>>({});
 
-  // selection state (kept as-is)
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
-  // ANT detail state (unchanged)
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
-  // 1️⃣ Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // onClick toggles selection; now also attaches snapshot (if known)
   const onCardClick = (evt: TimelineEvent) => {
     if (selectedEvent?.txHash === evt.txHash) {
       setSelectedEvent(null);
@@ -354,7 +337,7 @@ export default function History() {
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
-  // fetch ANT detail (unchanged)
+  // Fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
     setAntError(null);
@@ -367,87 +350,130 @@ export default function History() {
       .finally(() => setAntLoading(false));
   }, [arnsname, retryToken]);
 
+  // Canonical comparator: timestamp (sec) → txHash
+  function compareEvents(a: Pick<TimelineEvent, 'timestamp' | 'txHash'>, b: Pick<TimelineEvent, 'timestamp' | 'txHash'>) {
+    const ta = Number(a.timestamp || 0);
+    const tb = Number(b.timestamp || 0);
+    if (ta !== tb) return ta - tb;
+    if (a.txHash === b.txHash) return 0;
+    return a.txHash < b.txHash ? -1 : 1;
+  }
+
+  // Map event → { action, legendKey }
+  function classifyEvent(ev: IARNSEvent): { action: string; legendKey: string } {
+    switch (ev.constructor.name) {
+      case BuyNameEvent.name:           return { action: 'Purchased ANT Name',    legendKey: 'ant-buy-event' };
+      case ReassignNameEvent.name:      return { action: 'Reassigned ANT Name',   legendKey: 'ant-reassign-event' };
+      case ReturnedNameEvent.name:      return { action: 'Returned ANT Name',     legendKey: 'ant-return-event' };
+      case ExtendLeaseEvent.name:       return { action: 'Extended Lease',        legendKey: 'ant-extend-lease-event' };
+      case IncreaseUndernameEvent.name: return { action: 'Added undername',       legendKey: 'undername-creation' };
+      case RecordEvent.name:            return { action: 'Changed page contents', legendKey: 'ant-content-change' };
+      case SetRecordEvent.name:         return { action: 'Set Record',            legendKey: 'ant-content-change' };
+      case UpgradeNameEvent.name:       return { action: 'Upgraded ANT Name',     legendKey: 'ant-upgrade-event' };
+      case StateNoticeEvent.name:       return { action: 'State Notice',          legendKey: 'ant-state-change' };
+      case CreditNoticeEvent.name:      return { action: 'Credit Notice',         legendKey: 'ant-credit-notice' };
+      default:                          return { action: 'Unknown Event',         legendKey: 'multiple-changes' };
+    }
+  }
+
+  // Resolve one event → fields + delta (no folding here)
+  function resolveEvent$(e: IARNSEvent): Observable<ResolvedForBuild> {
+    const { action, legendKey } = classifyEvent(e);
+    const actor$     = toObs(e.getInitiator?.());
+    const timestamp$ = toObs(e.getEventTimeStamp?.()); // assume seconds
+    const txHash$    = toObs(e.getEventMessageId?.());
+    const delta$     = computeDelta$(e);
+
+    return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
+      map(({ actor, timestamp, txHash, delta }) => ({
+        action,
+        actor: actor ?? '',
+        legendKey,
+        timestamp: Number(timestamp ?? 0), // canonical seconds
+        txHash: txHash ?? '',
+        rawEvent: e,
+        delta: delta ?? {},
+      }))
+    );
+  }
+
   useEffect(() => {
+    // Reset state
     setEvents([]);
     setSnapshots([]);
     firstIndexByTxHashRef.current = {};
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
-  
-    // Running snapshot lives in the effect (sequentially updated)
-    let snap: AntSnapshot = initialSnapshot;
-  
+
     const service = ARIORewindService.autoConfiguration();
+
     const sub = service
       .getEventHistory$(arnsname)
       .pipe(
         catchError(err => {
           setError(err?.message || 'Failed to load history');
-          return EMPTY;
+          return of([] as IARNSEvent[]);
         }),
         switchMap((raw: IARNSEvent[]) => from(raw)),
-  
-        // Important: keep temporal order
-        concatMap((e: IARNSEvent) => {
-          // Resolve the small-card UI fields correctly (await getters)
-          const actor$     = toObs(e.getInitiator?.());
-          const timestamp$ = toObs(e.getEventTimeStamp?.());
-          const txHash$    = toObs(e.getEventMessageId?.());
-  
-          let action = 'Unknown Event';
-          let legendKey = 'multiple-changes';
-          switch (e.constructor.name) {
-            case BuyNameEvent.name:           action = 'Purchased ANT Name';     legendKey = 'ant-buy-event';          break;
-            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';    legendKey = 'ant-reassign-event';     break;
-            case ReturnedNameEvent.name:      action = 'Returned ANT Name';      legendKey = 'ant-return-event';       break;
-            case ExtendLeaseEvent.name:       action = 'Extended Lease';         legendKey = 'ant-extend-lease-event'; break;
-            case IncreaseUndernameEvent.name: action = 'Added undername';        legendKey = 'undername-creation';     break;
-            case RecordEvent.name:            action = 'Changed page contents';  legendKey = 'ant-content-change';     break;
-            case SetRecordEvent.name:         action = 'Set Record';             legendKey = 'ant-content-change';     break;
-            case UpgradeNameEvent.name:       action = 'Upgraded ANT Name';      legendKey = 'ant-upgrade-event';      break;
-            case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
-            case CreditNoticeEvent.name:      action = 'Credit Notice';          legendKey = 'ant-credit-notice';      break;
-          }
-  
-          const delta$ = computeDelta$(e);
-  
-          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
-            map(({ actor, timestamp, txHash, delta }) => {
-              snap = applyDelta(snap, delta); // sequentially apply Delta → Snapshot
-  
-              return {
-                action,
-                actor: actor ?? '',
-                legendKey,
-                timestamp: timestamp ?? 0,
-                txHash: txHash ?? '',
-                rawEvent: e,
-                snapshot: snap, // snapshot as-of this event
-              } as TimelineEvent;
-            })
-          );
-        })
+        // Resolve concurrently; small list so modest concurrency is fine
+        mergeMap((e: IARNSEvent) => resolveEvent$(e), 8),
+        toArray(), // materialize full list
       )
       .subscribe({
-        next: (uiEvt: TimelineEvent) => {
-          setEvents(prev => {
-            const idx = prev.length;
-            if (firstIndexByTxHashRef.current[uiEvt.txHash] === undefined) {
-              firstIndexByTxHashRef.current[uiEvt.txHash] = idx;
-            }
-            return [...prev, uiEvt];
+        next: (resolved: ResolvedForBuild[]) => {
+          // 1) Dedupe by txHash (keep earliest by comparator)
+          // Sort first so we can keep first occurrence when scanning
+          const sortedAll = [...resolved].sort(compareEvents);
+          const seen = new Set<string>();
+          const deduped: ResolvedForBuild[] = [];
+          for (const ev of sortedAll) {
+            if (!ev.txHash) continue;
+            if (seen.has(ev.txHash)) continue;
+            seen.add(ev.txHash);
+            deduped.push(ev);
+          }
+
+          // 2) Fold snapshots in order (authoritative for StateNotice)
+          const finalEvents: TimelineEvent[] = [];
+          const snaps: AntSnapshot[] = [];
+          let snap: AntSnapshot = initialSnapshot;
+
+          deduped.forEach((row) => {
+            const authoritative = row.rawEvent.constructor.name === StateNoticeEvent.name;
+            snap = applyDelta(snap, row.delta, { authoritative });
+            snaps.push(snap);
+            finalEvents.push({
+              action: row.action,
+              actor: row.actor,
+              legendKey: row.legendKey,
+              timestamp: row.timestamp,
+              txHash: row.txHash,
+              rawEvent: row.rawEvent,
+              snapshot: snap,
+            });
           });
-          setSnapshots(prev => [...prev, uiEvt.snapshot!]);
+
+          // 3) Build txHash -> first index map
+          const indexMap: Record<string, number> = {};
+          finalEvents.forEach((ev, idx) => {
+            if (indexMap[ev.txHash] === undefined) indexMap[ev.txHash] = idx;
+          });
+
+          // 4) Commit to state once
+          firstIndexByTxHashRef.current = indexMap;
+          setSnapshots(snaps);
+          setEvents(finalEvents);
+          setLoading(false);
         },
-        complete: () => setLoading(false),
         error: () => setLoading(false),
+        complete: () => void 0,
       });
-  
+
     return () => sub.unsubscribe();
   }, [arnsname, retryToken]);
 
-  // After selection paints, pan/zoom to it (unchanged)
+  // After selection paints, pan/zoom to it
   useLayoutEffect(() => {
     if (!selectedEvent) return;
     const node = cardRefs.current[selectedEvent.txHash];
@@ -455,49 +481,44 @@ export default function History() {
       transformRef.current.zoomToElement(node, 300);
     }
   }, [selectedEvent]);
-// Before your normal render of chain etc.
-if (!antLoading && (antError || !antDetail)) {
-  return (
-    <div className="history">
-      <FailureView
-        title="Couldn’t load ANT details"
-        message={antError || 'The name may not exist, or the gateway is unavailable.'}
-        onRetry={doRetry}
-        onHome={() => navigate('/')}
-      />
-    </div>
-  );
-}
 
-if (!loading && (error || events.length < 1)) {
-  return (
-    <div className="history">
-      <FailureView
-        title={error ? 'Couldn’t load history' : 'No history yet'}
-        message={
-          error
-            ? error
-            : 'We couldn’t find any events for this name. Try another name or retry.'
-        }
-        onRetry={doRetry}
-        onHome={() => navigate('/')}
-      />
-    </div>
-  );
-}
+  // Failure/empty states
+  if (!antLoading && (antError || !antDetail)) {
+    return (
+      <div className="history">
+        <FailureView
+          title="Couldn’t load ANT details"
+          message={antError || 'The name may not exist, or the gateway is unavailable.'}
+          onRetry={doRetry}
+          onHome={() => navigate('/')}
+        />
+      </div>
+    );
+  }
+
+  if (!loading && (error || events.length < 1)) {
+    return (
+      <div className="history">
+        <FailureView
+          title={error ? 'Couldn’t load history' : 'No history yet'}
+          message={
+            error
+              ? error
+              : 'We couldn’t find any events for this name. Try another name or retry.'
+          }
+          onRetry={doRetry}
+          onHome={() => navigate('/')}
+        />
+      </div>
+    );
+  }
+
   if (antLoading) return <LoadingScreen />;
   if (loading)    return <div className="loading">Loading history…</div>;
 
-  const uniqueMap = new Map<string, TimelineEvent>();
-  events.forEach(evt => {
-    if (!uniqueMap.has(evt.txHash)) {
-      uniqueMap.set(evt.txHash, evt);
-    }
-  });
-
-  // Build the timeline cards & make them clickable (unchanged)
-  const timelineEvents = Array.from(uniqueMap.values())
-    .sort((a, b) => a.timestamp - b.timestamp)
+  // The events array is already sorted & deduped; render as-is.
+  const timelineCards = events
+    .filter(ev => ev.action !== 'Credit Notice') // keep out of UI if desired
     .map((st, i) => {
       const isSelected = selectedEvent?.txHash === st.txHash;
       return {
@@ -516,7 +537,7 @@ if (!loading && (error || events.length < 1)) {
             <hr />
             <div className="chain-card-footer">
               <span className="date">
-                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                {new Date((st.timestamp || 0) * 1000).toLocaleDateString(undefined, {
                   year: 'numeric', month: 'short', day: 'numeric'
                 })}
               </span>
@@ -534,8 +555,6 @@ if (!loading && (error || events.length < 1)) {
         )
       };
     });
-
-
 
   return (
     <div className="history">
@@ -625,11 +644,11 @@ if (!loading && (error || events.length < 1)) {
                 contentStyle={{ width: '100%', height: '100%' }}
               >
                 <div className="chain-container">
-                    {timelineEvents.map(ev => (
-                      <div key={ev.key} className="chain-item">
-                        {ev.content}
-                      </div>
-                    ))}
+                  {timelineCards.map(ev => (
+                    <div key={ev.key} className="chain-item">
+                      {ev.content}
+                    </div>
+                  ))}
                 </div>
               </TransformComponent>
             </>
@@ -637,7 +656,7 @@ if (!loading && (error || events.length < 1)) {
         </TransformWrapper>
       </div>
 
-      {/* Detail pop-up (unchanged signature – uiEvent only) */}
+      {/* Detail pop-up */}
       {selectedEvent && (
         <div
           ref={detailRef}

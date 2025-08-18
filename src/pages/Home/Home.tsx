@@ -9,7 +9,7 @@ export default function Home() {
 
   // Called on form submit or button click
   const goToDetail = () => {
-    const name = query.trim();
+    const name = query.trim().toLowerCase();
     if (name) {
       // adjust this path to match your router
       navigate(`/history/${encodeURIComponent(name)}`);
