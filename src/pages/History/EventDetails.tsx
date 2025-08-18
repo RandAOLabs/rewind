@@ -96,7 +96,7 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
                 </code>
               </div>
 
-              <div>
+              {/* <div>
                 <span>Expiry</span>
                 <code>
                   {snap.expiryTs
@@ -108,7 +108,7 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
               <div>
                 <span>TTL (s)</span>
                 <code>{snap.ttlSeconds ?? 0}</code>
-              </div>
+              </div> */}
 
               {snap.processId && (
                 <div>
