@@ -71,16 +71,16 @@ export interface AntSnapshot {
 
 export const initialSnapshot: AntSnapshot = {
   owner: 'initial',
-  controllers: ['initial', 'initial2', 'initial3'],
+  controllers: [],
   expiryTs: 0,
   ttlSeconds: 0,
   processId: 'initial',
   targetId: 'initial',
-  undernames: ['initial', 'initial2', 'initial3'],
-  contentHashes: { initial: 'initial' },
+  undernames: [],
+  contentHashes: {},
   description: 'initial',
   ticker: 'initial',
-  keywords: ['initial', 'initial2', 'initial3'],
+  keywords: [],
 };
 
 type SnapshotDelta = Partial<AntSnapshot>;
@@ -137,9 +137,12 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
       const records$ = toObs(e.getRecords?.());
       const contentHashes$ = records$.pipe(map(records => Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))));
       const undernames$ = records$.pipe(map(records => Object.keys(records)));
-      console.log(records$);
+      const target$ = toObs(e.getRecords?.()).pipe(
+        map(records => records['@']?.transactionId),
+      );
       return forkJoin({
         owner:       toObs(e.getOwner?.()),
+        targetId:    target$,
         controllers: toObs(e.getControllers?.()),
         processId:   toObs(e.getANTProcessId?.()),
         expiryTs:    toObs((e as any).getNewExpiry?.()),
@@ -404,7 +407,6 @@ export default function History() {
             case UpgradeNameEvent.name:       action = 'Upgraded ANT Name';      legendKey = 'ant-upgrade-event';      break;
             case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
           }
-          console.log(e);
   
           const delta$ = computeDelta$(e);
   
