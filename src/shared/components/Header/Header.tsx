@@ -16,7 +16,7 @@ export default function Header() {
 
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const name = query.trim();
+    const name = query.trim().toLowerCase();
     if (name) {
       navigate(`/history/${encodeURIComponent(name)}`);
       setQuery('');
