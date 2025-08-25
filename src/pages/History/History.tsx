@@ -4,6 +4,7 @@ import FailureView from './FailureView';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import {
   ARIORewindService,
@@ -22,7 +23,7 @@ import {
   CreditNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
-import { switchMap, mergeMap, map, catchError, concatMap, toArray } from 'rxjs/operators';
+import { switchMap, mergeMap, map, catchError, concatMap } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
@@ -37,6 +38,7 @@ function LoadingScreen() {
 /** Wrap a sync value or Promise into an Observable (undefined-safe). */
 function toObs<T>(v: T | Promise<T> | undefined): Observable<T | undefined> {
   if (v === undefined) return of(undefined as T | undefined);
+  // Force to Promise to normalize sync/async, then "from" it.
   return from(Promise.resolve(v));
 }
 
@@ -62,6 +64,7 @@ export interface AntSnapshot {
   ttlSeconds: number;
   processId?: string;
   targetId?: string;
+  undernameLimit?: number;
   undernames: string[];
   contentHashes: ContentHashes;
   description?: string;
@@ -76,6 +79,7 @@ export const initialSnapshot: AntSnapshot = {
   ttlSeconds: 0,
   processId: '',
   targetId: '',
+  undernameLimit: 0,
   undernames: [],
   contentHashes: {},
   description: '',
@@ -124,9 +128,10 @@ function applyDelta(
     controllers: nextControllers ?? [],
     undernames: nextUndernames ?? [],
     contentHashes: nextContentHashes ?? {},
-    keywords: nextKeywords,
+    keywords: nextKeywords, // may be undefined if you don't use it
   };
 }
+
 
 /** Resolve only the fields you want to carry forward for each event type. */
 function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
@@ -134,18 +139,11 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     case StateNoticeEvent.name: {
       const e = ev as StateNoticeEvent;
       const records$ = toObs(e.getRecords?.());
-      const contentHashes$ = records$.pipe(
-        map(records =>
-          records
-            ? Object.fromEntries(
-                Object.entries(records).map(([k, v]: [string, any]) => [k, v?.transactionId])
-              )
-            : {}
-        )
+      const contentHashes$ = records$.pipe(map(records => Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))));
+      const undernames$ = records$.pipe(map(records => Object.keys(records)));
+      const target$ = toObs(e.getRecords?.()).pipe(
+        map(records => records['@']?.transactionId),
       );
-      const undernames$ = records$.pipe(map(records => (records ? Object.keys(records) : [])));
-      const target$ = records$.pipe(map(records => records?.['@']?.transactionId));
-
       return forkJoin({
         owner:       toObs(e.getOwner?.()),
         targetId:    target$,
@@ -155,6 +153,7 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
         description: toObs(e.getDescription?.()),
         ticker:      toObs(e.getTicker?.()),
         keywords:    toObs(e.getKeywords?.()),
+        // If available in your SDK, add:
         contentHashes: contentHashes$,
         undernames:    undernames$,
       }).pipe(map(stripUndef));
@@ -204,21 +203,37 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     }
 
     case IncreaseUndernameEvent.name: {
-      // TODO: adapt when SDK exposes fields you need
+      // Adapt when you know what the SDK exposes here
+      // e.g., const label$ = toObs((e as any).getUndername?.())
       return of({} as SnapshotDelta);
     }
 
-    case RecordEvent.name:
     case SetRecordEvent.name: {
-      // TODO: adapt when SDK exposes label/key/value
-      return of({} as SnapshotDelta);
+      const e = ev as SetRecordEvent;
+      const tid$ = toObs(e.getTransactionId?.());
+      const subDomain$ = toObs(e.getSubDomain?.());
+      const ttl = toObs(e.getTtlSeconds?.()); 
+
+      return forkJoin({ tid: tid$, subDomain: subDomain$, ttl: ttl }).pipe(
+        map(({ tid, subDomain, ttl }) => (subDomain && ttl)
+          ? { contentHashes: { [subDomain]: tid }, ttlSeconds: ttl }
+          : {}
+        )
+      );
     }
 
     case UpgradeNameEvent.name: {
+      // Add process/target adjustments if exposed
+      const e = ev as UpgradeNameEvent;
+      const startTime = toObs(e.getStartTime?.());
+      const getPurchasePrice = toObs(e.getPurchasePrice?.());
+      const undernameLimit = toObs(e.getUndernameLimit?.());
+      
       return of({} as SnapshotDelta);
     }
 
     case ReturnedNameEvent.name: {
+      // Optionally clear owner/etc if your UX wants that
       return of({} as SnapshotDelta);
     }
 
@@ -227,19 +242,19 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
   }
 }
 
-/* ===== Events & UI types ===== */
+/* ===== /running ANT state ===== */
 
+// The shape we render into cards
 export interface TimelineEvent {
   action:     string;
   actor:      string;
   legendKey:  string;
-  timestamp:  number; // seconds (canonical)
+  timestamp:  number;
   txHash:     string;
+  extraBox?: ExtraBox;
   rawEvent:   IARNSEvent;
-  snapshot?:  AntSnapshot; // attached on selection or pre-attached after fold
+  snapshot?:  AntSnapshot;
 }
-
-type ResolvedForBuild = TimelineEvent & { delta: SnapshotDelta };
 
 interface CurrentAntBarProps {
   name: string;
@@ -252,11 +267,10 @@ interface CurrentAntBarProps {
   logoTxId: string;
   records: Record<string, AntRecord>;
   targetId: string;
-  undernameLimit: number;
+  undernameLimit?: number;
   expiryDate: Date;
   leaseDuration: string;
 }
-
 function CurrentAntBar({
   name,
   expiryTs,
@@ -272,61 +286,234 @@ function CurrentAntBar({
   undernameLimit,
   expiryDate,
 }: CurrentAntBarProps) {
+  const fmt = (ts?: number) =>
+    ts
+      ? new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : '—';
+
+  const ellip = (s?: string, keep = 4) => {
+    if (!s) return '—';
+    return s.slice(0, keep); // only first N chars
+  };
+
+  const safeLease =
+    typeof leaseDuration === 'string' && leaseDuration.trim() && !/NaN/i.test(leaseDuration)
+      ? leaseDuration
+      : '—';
+
+  const ctrls = controllers ?? [];
+
   return (
-    <div className="current-ant-bar">
-      <button className="back-button" onClick={onBack} aria-label="Go back">
-        <AiOutlineArrowLeft size={20} />
-      </button>
-      <span>Name: <code>{name}</code></span>
-      <span>
-        Expiry: {new Date(expiryTs).toLocaleDateString(undefined, {
-          year: 'numeric', month: 'short', day: 'numeric'
-        })}
-      </span>
-      {/* <span>Lease: {leaseDuration }</span> */}
-      <span>
-        Process ID: <code>{processId.slice(0,5)}...</code>
-      </span>
-      <span>
-        Controllers: {controllers.map(c => c.slice(0,5) + '...').join(', ')}
-      </span>
-      <span>
-        Owner: <code>{owner.slice(0,5)}...</code>
-      </span>
-      <span>TTL: {ttlSeconds}s</span>
-      <span>Logo Tx ID: <code>{logoTxId.slice(0,5)}...</code></span>
-      <span>Target ID: <code>{targetId.slice(0,5)}...</code></span>
-      <span>Undername Limit: {undernameLimit}</span>
+    <div className="current-ant-bar" role="region" aria-label="Current ANT summary">
+      <div className="cab-aurora" aria-hidden="true" />
+      <div className="cab-glass">
+        <button className="back-button" onClick={onBack} aria-label="Go back">
+          <AiOutlineArrowLeft size={16} />
+        </button>
+
+        <div className="cab-main">
+          <div className="cab-name">
+            <span className="cab-label">Name</span>
+            <code className="cab-code">{name}</code>
+          </div>
+
+          <div className="cab-chips" role="list">
+            <span className="chip" role="listitem">
+              <span className="chip-k">Expiry</span>
+              <span className="chip-v">{fmt(expiryTs)}</span>
+            </span>
+
+            {/* Process (clickable) */}
+            <span className="chip" role="listitem">
+              <span className="chip-k">Process</span>
+              {processId ? (
+                <a
+                  className="chip-v"
+                  href={`https://www.ao.link/#/entity/${processId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {ellip(processId)}
+                </a>
+              ) : (
+                <span className="chip-v">—</span>
+              )}
+            </span>
+
+            {/* Owner (clickable) */}
+            <span className="chip" role="listitem">
+              <span className="chip-k">Owner</span>
+              {owner ? (
+                <a
+                  className="chip-v"
+                  href={`https://www.ao.link/#/entity/${owner}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {ellip(owner)}
+                </a>
+              ) : (
+                <span className="chip-v">—</span>
+              )}
+            </span>
+
+            {/* Controllers (clickable first 2, with +N if more) */}
+            <span className="chip" role="listitem">
+              <span className="chip-k">Controllers</span>
+              <span className="chip-v">
+                {ctrls.length
+                  ? ctrls.slice(0, 2).map((c, idx) => (
+                      <React.Fragment key={c}>
+                        <a
+                          href={`https://www.ao.link/#/entity/${c}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {ellip(c, 4)}
+                        </a>
+                        {idx < ctrls.slice(0, 2).length - 1 ? ', ' : ''}
+                      </React.Fragment>
+                    ))
+                  : '—'}
+                {ctrls.length > 2 ? ` +${ctrls.length - 2}` : ''}
+              </span>
+            </span>
+
+            <span className="chip" role="listitem">
+              <span className="chip-k">Content Target</span>
+              <span className="chip-v">{ellip(targetId)}</span>
+            </span>
+
+            <span className="chip" role="listitem">
+              <span className="chip-k">Undername Limit</span>
+              <span className="chip-v">{undernameLimit ?? '—'}</span>
+            </span>
+          </div>
+
+          <div className="cab-fade" aria-hidden="true" />
+        </div>
+      </div>
     </div>
   );
 }
+
+
+// ========================================
+
+
+type ExtraItem = { label: string; value: string };
+type ExtraBox  = { tag: string; items: ExtraItem[] };
+
+function fmtDate(ts?: number) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function ellip(str?: string, keep = 5) {
+  if (!str) return '—';
+  if (str.length <= keep * 2 + 3) return str;
+  return `${str.slice(0, keep)}…${str.slice(-keep)}`;
+}
+
+const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefined> = {
+  'Purchased ANT Name': (e) => ({
+    tag: 'LEASE',
+    items: [
+      { label: 'Expiry',      value: fmtDate(e.snapshot?.expiryTs) },
+      { label: 'Owner',       value: ellip(e.snapshot?.owner) },
+      { label: 'Process',     value: ellip(e.snapshot?.processId) },
+    ],
+  }),
+
+  'Extended Lease': (e) => ({
+    tag: 'LEASE',
+    items: [
+      { label: 'New Expiry',  value: fmtDate(e.snapshot?.expiryTs) },
+      { label: 'TTL',         value: `${e.snapshot?.ttlSeconds ?? 0}s` },
+    ],
+  }),
+
+  'Reassigned ANT Name': (e) => ({
+    tag: 'OWNER',
+    items: [
+      { label: 'Owner',       value: ellip(e.snapshot?.owner) },
+      { label: 'Controllers', value: (e.snapshot?.controllers ?? []).map(c => ellip(c, 4)).join(', ') || '—' },
+    ],
+  }),
+
+  'State Notice': (e) => ({
+    tag: 'STATE',
+    items: [
+      { label: 'Process',     value: ellip(e.snapshot?.processId) },
+      { label: 'Target',      value: ellip(e.snapshot?.targetId) },
+      { label: 'Undernames',  value: String(e.snapshot?.undernames?.length ?? 0) },
+    ],
+  }),
+
+  'Set Record': (e) => ({
+    tag: 'RECORD',
+    items: [
+      { label: 'Root (@)',    value: ellip(e.snapshot?.contentHashes?.['@']) },
+      { label: 'Labels',      value: Object.keys(e.snapshot?.contentHashes ?? {}).length.toString() },
+    ],
+  }),
+
+  // 'Upgrade ANT Name': (e) => ({
+  //   tag: 'UPGRADE',
+  //   items: [
+  //     { label: 'Start Time',  value: fmtDate(e.snapshot?.startTime) },
+  //     { label: 'Purchase Price', value: e.snapshot?.purchasePrice },
+  //     { label: 'Undername Limit', value: e.snapshot?.undernameLimit },
+  //   ],
+  // }),
+
+  // Fallback for anything unhandled:
+  'default': (e) => ({
+    tag: 'INFO',
+    items: [
+      { label: 'Tx',          value: ellip(e.txHash) },
+      { label: 'When',        value: fmtDate((e.timestamp ?? 0) * 1000 /* if you stored secs */) },
+    ],
+  }),
+};
+
+function buildExtraBox(e: TimelineEvent): ExtraBox | undefined {
+  const fn = extraBoxBuilders[e.action] ?? extraBoxBuilders['default'];
+  return fn?.(e);
+}
+
 
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
+
   const [retryToken, setRetryToken] = useState(0);
   const doRetry = () => setRetryToken(t => t + 1);
-
+  
+  
   const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
-  // snapshots aligned 1:1 with events (already sorted)
+  // snapshots aligned 1:1 with events as they stream in
   const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
-  // txHash -> first index
+  // map first occurrence of txHash -> event index (so deduped cards still map to a snapshot)
   const firstIndexByTxHashRef = useRef<Record<string, number>>({});
 
+  // selection state (kept as-is)
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
+  // ANT detail state (unchanged)
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
+  // 1️⃣ Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // onClick toggles selection; now also attaches snapshot (if known)
   const onCardClick = (evt: TimelineEvent) => {
     if (selectedEvent?.txHash === evt.txHash) {
       setSelectedEvent(null);
@@ -337,7 +524,7 @@ export default function History() {
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
-  // Fetch ANT detail (unchanged)
+  // fetch ANT detail (unchanged)
   useEffect(() => {
     setAntLoading(true);
     setAntError(null);
@@ -349,131 +536,90 @@ export default function History() {
       .catch(err => setAntError(err.message || 'Failed to load ANT details'))
       .finally(() => setAntLoading(false));
   }, [arnsname, retryToken]);
-
-  // Canonical comparator: timestamp (sec) → txHash
-  function compareEvents(a: Pick<TimelineEvent, 'timestamp' | 'txHash'>, b: Pick<TimelineEvent, 'timestamp' | 'txHash'>) {
-    const ta = Number(a.timestamp || 0);
-    const tb = Number(b.timestamp || 0);
-    if (ta !== tb) return ta - tb;
-    if (a.txHash === b.txHash) return 0;
-    return a.txHash < b.txHash ? -1 : 1;
-  }
-
-  // Map event → { action, legendKey }
-  function classifyEvent(ev: IARNSEvent): { action: string; legendKey: string } {
-    switch (ev.constructor.name) {
-      case BuyNameEvent.name:           return { action: 'Purchased ANT Name',    legendKey: 'ant-buy-event' };
-      case ReassignNameEvent.name:      return { action: 'Reassigned ANT Name',   legendKey: 'ant-reassign-event' };
-      case ReturnedNameEvent.name:      return { action: 'Returned ANT Name',     legendKey: 'ant-return-event' };
-      case ExtendLeaseEvent.name:       return { action: 'Extended Lease',        legendKey: 'ant-extend-lease-event' };
-      case IncreaseUndernameEvent.name: return { action: 'Added undername',       legendKey: 'undername-creation' };
-      case RecordEvent.name:            return { action: 'Changed page contents', legendKey: 'ant-content-change' };
-      case SetRecordEvent.name:         return { action: 'Set Record',            legendKey: 'ant-content-change' };
-      case UpgradeNameEvent.name:       return { action: 'Upgraded ANT Name',     legendKey: 'ant-upgrade-event' };
-      case StateNoticeEvent.name:       return { action: 'State Notice',          legendKey: 'ant-state-change' };
-      case CreditNoticeEvent.name:      return { action: 'Credit Notice',         legendKey: 'ant-credit-notice' };
-      default:                          return { action: 'Unknown Event',         legendKey: 'multiple-changes' };
-    }
-  }
-
-  // Resolve one event → fields + delta (no folding here)
-  function resolveEvent$(e: IARNSEvent): Observable<ResolvedForBuild> {
-    const { action, legendKey } = classifyEvent(e);
-    const actor$     = toObs(e.getInitiator?.());
-    const timestamp$ = toObs(e.getEventTimeStamp?.()); // assume seconds
-    const txHash$    = toObs(e.getEventMessageId?.());
-    const delta$     = computeDelta$(e);
-
-    return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
-      map(({ actor, timestamp, txHash, delta }) => ({
-        action,
-        actor: actor ?? '',
-        legendKey,
-        timestamp: Number(timestamp ?? 0), // canonical seconds
-        txHash: txHash ?? '',
-        rawEvent: e,
-        delta: delta ?? {},
-      }))
-    );
-  }
-
+  console.log(antDetail);
   useEffect(() => {
-    // Reset state
     setEvents([]);
     setSnapshots([]);
     firstIndexByTxHashRef.current = {};
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
-
+  
+    // Running snapshot lives in the effect (sequentially updated)
+    let snap: AntSnapshot = initialSnapshot;
+  
     const service = ARIORewindService.autoConfiguration();
-
     const sub = service
       .getEventHistory$(arnsname)
       .pipe(
         catchError(err => {
           setError(err?.message || 'Failed to load history');
-          return of([] as IARNSEvent[]);
+          return EMPTY;
         }),
         switchMap((raw: IARNSEvent[]) => from(raw)),
-        // Resolve concurrently; small list so modest concurrency is fine
-        mergeMap((e: IARNSEvent) => resolveEvent$(e), 8),
-        toArray(), // materialize full list
+  
+        // Important: keep temporal order
+        concatMap((e: IARNSEvent) => {
+          console.log(e);
+          // Resolve the small-card UI fields correctly (await getters)
+          const actor$     = toObs(e.getInitiator?.());
+          const timestamp$ = toObs(e.getEventTimeStamp?.());
+          const txHash$    = toObs(e.getEventMessageId?.());
+  
+          let action = 'Unknown Event';
+          let legendKey = 'multiple-changes';
+          switch (e.constructor.name) {
+            case BuyNameEvent.name:           action = 'Purchased ANT Name';     legendKey = 'ant-buy-event';          break;
+            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';    legendKey = 'ant-reassign-event';     break;
+            case ReturnedNameEvent.name:      action = 'Returned ANT Name';      legendKey = 'ant-return-event';       break;
+            case ExtendLeaseEvent.name:       action = 'Extended Lease';         legendKey = 'ant-extend-lease-event'; break;
+            case IncreaseUndernameEvent.name: action = 'Added undername';        legendKey = 'undername-creation';     break;
+            case RecordEvent.name:            action = 'Updated Mainpage Contents';  legendKey = 'ant-content-change';     break;
+            case SetRecordEvent.name:         action = 'Set Record';             legendKey = 'ant-content-change';     break;
+            case UpgradeNameEvent.name:       action = 'Permanent ANT Purchase';      legendKey = 'ant-upgrade-event';      break;
+            case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
+            case CreditNoticeEvent.name:      action = 'Credit Notice';          legendKey = 'ant-credit-notice';      break;
+          }
+  
+          const delta$ = computeDelta$(e);
+  
+          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
+            map(({ actor, timestamp, txHash, delta }) => {
+              snap = applyDelta(snap, delta); // sequentially apply Delta → Snapshot
+              
+              return {
+                action,
+                actor: actor ?? '',
+                legendKey,
+                timestamp: timestamp ?? 0,
+                txHash: txHash ?? '',
+                rawEvent: e,
+                snapshot: snap, // snapshot as-of this event
+                extraBox: buildExtraBox({ action, actor, legendKey, timestamp, txHash, rawEvent: e, snapshot: snap }),
+              } as TimelineEvent;
+            })
+          );
+        })
       )
       .subscribe({
-        next: (resolved: ResolvedForBuild[]) => {
-          // 1) Dedupe by txHash (keep earliest by comparator)
-          // Sort first so we can keep first occurrence when scanning
-          const sortedAll = [...resolved].sort(compareEvents);
-          const seen = new Set<string>();
-          const deduped: ResolvedForBuild[] = [];
-          for (const ev of sortedAll) {
-            if (!ev.txHash) continue;
-            if (seen.has(ev.txHash)) continue;
-            seen.add(ev.txHash);
-            deduped.push(ev);
-          }
-
-          // 2) Fold snapshots in order (authoritative for StateNotice)
-          const finalEvents: TimelineEvent[] = [];
-          const snaps: AntSnapshot[] = [];
-          let snap: AntSnapshot = initialSnapshot;
-
-          deduped.forEach((row) => {
-            const authoritative = row.rawEvent.constructor.name === StateNoticeEvent.name;
-            snap = applyDelta(snap, row.delta, { authoritative });
-            snaps.push(snap);
-            finalEvents.push({
-              action: row.action,
-              actor: row.actor,
-              legendKey: row.legendKey,
-              timestamp: row.timestamp,
-              txHash: row.txHash,
-              rawEvent: row.rawEvent,
-              snapshot: snap,
-            });
+        next: (uiEvt: TimelineEvent) => {
+          setEvents(prev => {
+            const idx = prev.length;
+            if (firstIndexByTxHashRef.current[uiEvt.txHash] === undefined) {
+              firstIndexByTxHashRef.current[uiEvt.txHash] = idx;
+            }
+            return [...prev, uiEvt];
           });
-
-          // 3) Build txHash -> first index map
-          const indexMap: Record<string, number> = {};
-          finalEvents.forEach((ev, idx) => {
-            if (indexMap[ev.txHash] === undefined) indexMap[ev.txHash] = idx;
-          });
-
-          // 4) Commit to state once
-          firstIndexByTxHashRef.current = indexMap;
-          setSnapshots(snaps);
-          setEvents(finalEvents);
-          setLoading(false);
+          setSnapshots(prev => [...prev, uiEvt.snapshot!]);
         },
+        complete: () => setLoading(false),
         error: () => setLoading(false),
-        complete: () => void 0,
       });
-
+  
     return () => sub.unsubscribe();
   }, [arnsname, retryToken]);
 
-  // After selection paints, pan/zoom to it
+  // After selection paints, pan/zoom to it (unchanged)
   useLayoutEffect(() => {
     if (!selectedEvent) return;
     const node = cardRefs.current[selectedEvent.txHash];
@@ -482,43 +628,56 @@ export default function History() {
     }
   }, [selectedEvent]);
 
-  // Failure/empty states
-  if (!antLoading && (antError || !antDetail)) {
-    return (
-      <div className="history">
-        <FailureView
-          title="Couldn’t load ANT details"
-          message={antError || 'The name may not exist, or the gateway is unavailable.'}
-          onRetry={doRetry}
-          onHome={() => navigate('/')}
-        />
-      </div>
-    );
-  }
+  if (antLoading || loading) return <LoadingScreen />;
 
-  if (!loading && (error || events.length < 1)) {
-    return (
-      <div className="history">
-        <FailureView
-          title={error ? 'Couldn’t load history' : 'No history yet'}
-          message={
-            error
-              ? error
-              : 'We couldn’t find any events for this name. Try another name or retry.'
-          }
-          onRetry={doRetry}
-          onHome={() => navigate('/')}
-        />
-      </div>
-    );
-  }
+// Before your normal render of chain etc.
+if (!antLoading && (antError || !antDetail)) {
+  return (
+    <div className="history">
+      <FailureView
+        title="Couldn’t load ANT details"
+        message={antError || 'The name may not exist, or the gateway is unavailable.'}
+        onRetry={doRetry}
+        onHome={() => navigate('/')}
+      />
+    </div>
+  );
+}
 
-  if (antLoading) return <LoadingScreen />;
-  if (loading)    return <div className="loading">Loading history…</div>;
+if (error || events.length < 1) {
+  return (
+    <div className="history">
+      <FailureView
+        title={error ? 'Couldn’t load history' : 'No history yet'}
+        message={
+          error
+            ? error
+            : 'We couldn’t find any events for this name. Try another name or retry.'
+        }
+        onRetry={doRetry}
+        onHome={() => navigate('/')}
+      />
+    </div>
+  );
+}
 
-  // The events array is already sorted & deduped; render as-is.
-  const timelineCards = events
-    .filter(ev => ev.action !== 'Credit Notice') // keep out of UI if desired
+  const uniqueMap = new Map<string, TimelineEvent>();
+  events.forEach(evt => {
+    if (!uniqueMap.has(evt.txHash)) {
+      uniqueMap.set(evt.txHash, evt);
+    }
+  });
+
+  const excludedActions = [
+
+  ];
+
+  // Build the timeline cards & make them clickable (unchanged)
+  console.log(events.length);
+  console.log(uniqueMap.size)
+  const timelineEvents = Array.from(uniqueMap.values())
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .filter(st => !excludedActions.includes(st.action))
     .map((st, i) => {
       const isSelected = selectedEvent?.txHash === st.txHash;
       return {
@@ -537,7 +696,7 @@ export default function History() {
             <hr />
             <div className="chain-card-footer">
               <span className="date">
-                {new Date((st.timestamp || 0) * 1000).toLocaleDateString(undefined, {
+                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
                   year: 'numeric', month: 'short', day: 'numeric'
                 })}
               </span>
@@ -551,10 +710,27 @@ export default function History() {
                 </a>
               </span>
             </div>
+            {st.extraBox && (
+            <div className="chain-card-extra">
+              <span className="extra-tag">{st.extraBox.tag}</span>
+              <div className="extra-items">
+                {st.extraBox.items.map((it, idx) => (
+                  <div className="extra-item" key={idx}>
+                    <span className="extra-key">{it.label}</span>
+                    <span className="extra-sep">:</span>
+                    <span className="extra-value">{it.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           </div>
         )
       };
     });
+
+
 
   return (
     <div className="history">
@@ -632,6 +808,8 @@ export default function History() {
           initialPositionX={200}
           initialPositionY={125}
         >
+
+
           {({ zoomIn, zoomOut, resetTransform }) => (
             <>
               <div className="chain-controls">
@@ -644,19 +822,20 @@ export default function History() {
                 contentStyle={{ width: '100%', height: '100%' }}
               >
                 <div className="chain-container">
-                  {timelineCards.map(ev => (
-                    <div key={ev.key} className="chain-item">
-                      {ev.content}
-                    </div>
-                  ))}
+                    {timelineEvents.map(ev => (
+                      <div key={ev.key} className="chain-item">
+                        {ev.content}
+                      </div>
+                    ))}
                 </div>
               </TransformComponent>
             </>
+
           )}
         </TransformWrapper>
       </div>
 
-      {/* Detail pop-up */}
+      {/* Detail pop-up (unchanged signature – uiEvent only) */}
       {selectedEvent && (
         <div
           ref={detailRef}

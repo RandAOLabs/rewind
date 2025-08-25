@@ -4,71 +4,27 @@
   --current-ant-height: 60px;  /* tweak this to match your card’s real height */
 }
 
-/* make the history container fill its parent */
+/* ===== Option A: Aurora Wash ===== */
 .history {
   position: relative;
   height: 100%;
   width: 100%;
-  background-color: #000000;
-  background-image: radial-gradient(#444 1px, transparent 1px);
-  background-size: 20px 20px;
-  overflow: hidden;   /* ← no scrollbars on the root */
+  --bg1: #0b0c10;
+  --g1: rgba(60, 91, 188, 0.35);
+  --g2: rgba(147, 51, 234, 0.25);
+  --g3: rgba(16, 185, 129, 0.20);
+  background: radial-gradient(1200px 800px at 15% 10%, var(--g1), transparent 60%),
+              radial-gradient(900px 700px  at 85% 20%, var(--g2), transparent 60%),
+              radial-gradient(1000px 900px at 50% 90%, var(--g3), transparent 60%),
+              var(--bg1);
+  overflow: hidden;
 }
-
-/* tiny bar right below header */
-.current-ant-bar {
-  position: fixed;
-  top: calc(var(--header-height));
-  left: 0;
-  right: 0;
-  height: var(--current-ant-height);
-  background: rgba(59, 59, 59, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0 1rem;
-  font-size: 0.8rem;
-  color: #fff;
-  z-index: 100100;
-  border-top: 1px solid #222;
-  border-bottom: 1px solid #222;
-}
-
-
-/* add a thin divider to every span except the first */
-.current-ant-bar span + span {
-  position: relative;
-  padding-left: 0.75rem;
-  margin-left: 0.75rem;
-}
-
-/* the divider “bar” itself */
-.current-ant-bar span + span::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10%;
-  bottom: 10%;
-  width: 2px;
-  background-color: #444;  /* adjust to taste */
-}
-
-
-/* back arrow */
-.current-ant-bar .back-button {
-  position: absolute;
-  top: 50%;
-  left: 3rem;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  z-index: 1001;
-}
-.back-button:hover {
-  opacity: 0.8;
+@media (prefers-reduced-motion: no-preference) {
+  .history { animation: aurora-pan 22s ease-in-out infinite alternate; }
+  @keyframes aurora-pan {
+    0%   { background-position: 15% 10%, 85% 20%, 50% 90%, 0 0; }
+    100% { background-position: 25% 18%, 78% 28%, 45% 82%, 0 0; }
+  }
 }
 
 /* push the chain down beneath it */
@@ -126,7 +82,7 @@
 /* card styling */
 .chain-card {
   background: #111;
-  border:   1px solid #222;
+  border:   1px solid #84e9e4;
   border-radius: 8px;
   padding: 0.75rem;
   min-width: 200px;
@@ -165,7 +121,7 @@
   width: 420px;
   max-width: calc(100vw - 24px);
   background: linear-gradient(180deg, #191a1f 0%, #14151a 100%);
-  border-left: 3px solid #3b82f6;         /* accent */
+  border-left: 3px solid #84e9e4;         /* accent */
   border-radius: 12px 0 0 12px;
   box-shadow: -8px 0 24px rgba(0,0,0,0.45);
   color: #e5e7eb;
@@ -189,6 +145,7 @@
   display: grid;
   place-items: center;
   line-height: 1;
+  z-index: 10051;
 }
 .detailed-card .close-btn:hover {
   background: #2d2f36;
@@ -196,7 +153,7 @@
 
 /* ---- Inner layout (EventDetails) ---- */
 .event-detail {
-  padding: 16px 48px 12px 16px;   /* extra right so close-btn never overlaps */
+  padding: 16px 28px 12px 16px;   /* extra right so close-btn never overlaps */
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -518,7 +475,7 @@
 
 .legend {
   position: fixed;
-  top: calc(var(--header-height) + 6.5rem);
+  top: calc(var(--header-height) + 5rem);
   left: 1rem;
   background: rgba(0, 0, 0, 0.85);
   padding: 0.75rem 1rem;
@@ -527,6 +484,7 @@
   font-size: 0.9rem;
   z-index: 1003;
   max-width: 150px;
+  border: 1px solid #84e9e4;
 }
 
 .legend h4 {
@@ -757,4 +715,266 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chain-card-extra {
+  margin-top: 8px;
+  
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border, #84e9e4);
+  background: var(--card-subtle, rgba(0,0,0,0.03));
+}
+
+.chain-card.selected .chain-card-extra {
+  border-color: var(--accent, #6aa3ff);
+  background: var(--accent-subtle, rgba(106,163,255,0.08));
+}
+
+.extra-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--tag-border, #84e9e4);
+  background: var(--tag-bg, rgba(0,0,0,0.05));
+  white-space: nowrap;
+}
+
+.extra-items {
+  min-width: 0;
+  display: grid;
+  grid-auto-rows: minmax(18px, auto);
+  row-gap: 4px;
+}
+
+.extra-item {
+  display: grid;
+  grid-template-columns: auto 8px 1fr;
+  align-items: baseline;
+  column-gap: 6px;
+  min-width: 0;
+}
+
+.extra-key {
+  font-size: 12px;
+  color: var(--text-muted, rgba(66, 92, 114, 0.6));
+  white-space: nowrap;
+}
+
+.extra-sep {
+  font-size: 12px;
+  color: var(--text-muted, rgba(0,0,0,0.5));
+  text-align: center;
+}
+
+.extra-value {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Make padding + border count inside the width */
+.chain-card-extra {
+  box-sizing: border-box;
+  /* keep your existing rules... */
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border, #84e9e4);
+  background: var(--card-subtle, rgba(0,0,0,0.03));
+}
+
+/* If your card is a flex child anywhere, prevent flex overflow */
+.chain-card {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Ensure inner grids can shrink and not push width */
+.extra-items,
+.extra-item {
+  min-width: 0;
+}
+
+
+/* ===== Aurora Glass ANT Bar (refined) ===== */
+.current-ant-bar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  height: var(--current-ant-height); /* stays fixed */
+  z-index: 100100;
+  pointer-events: none; /* inner layers handle interaction */
+}
+
+/* Aurora layer */
+.current-ant-bar .cab-aurora {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(80% 180% at 10% 50%, rgba(99,102,241,0.30), transparent 60%),
+    radial-gradient(80% 180% at 90% 50%, rgba(16,185,129,0.22), transparent 60%);
+  filter: blur(18px);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .current-ant-bar .cab-aurora {
+    animation: cab-sway 18s ease-in-out infinite alternate;
+  }
+  @keyframes cab-sway {
+    0%   { transform: translateY(0px);   opacity: 0.8; }
+    100% { transform: translateY(6px);   opacity: 0.95; }
+  }
+}
+/* ───────────────── Glass container (unchanged) ───────────────── */
+/* Glass container */
+.current-ant-bar .cab-glass {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: auto;
+  isolation: isolate;
+}
+
+/* Main panel */
+.current-ant-bar .cab-main {
+  width: min(1200px, 96vw);
+  height: calc(var(--current-ant-height) - 14px);
+  position: relative;
+
+  background: linear-gradient(180deg, rgba(11,12,18,0.55), rgba(11,12,18,0.35));
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 0 0 1px rgba(147, 51, 234, 0.10),
+    0 8px 30px rgba(0,0,0,0.40);
+
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  overflow: hidden;
+}
+
+/* Left: name block (stays pinned left) */
+.cab-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 48px; /* for back button */
+  min-width: 0;
+  z-index: 1;
+}
+.cab-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  opacity: 0.88;
+  text-transform: uppercase;
+  color: #cbd5e1;
+}
+.cab-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  color: #e8eaee;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 2px 8px;
+  border-radius: 8px;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Center: chip row is absolutely centered */
+.cab-chips {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Chip styling */
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #e5e7eb;
+  line-height: 1;
+}
+.chip-k {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.chip-v {
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* clickable IDs inside chips */
+.chip-v a {
+  color: #7aa2ff;
+  text-decoration: none;
+}
+.chip-v a:hover {
+  text-decoration: underline;
+  color: #a5c4ff;
+}
+
+/* Back button */
+.current-ant-bar .back-button {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.current-ant-bar .back-button:hover {
+  transform: translateY(-50%) translateX(1px);
+  border-color: rgba(147, 51, 234, 0.35);
+  background: rgba(147, 51, 234, 0.12);
 }

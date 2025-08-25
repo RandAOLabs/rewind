@@ -47,7 +47,7 @@ export default function Footer() {
             className="footer-button"
             onClick={() => setShowChangeLog(true)}
           >
-            {`v${"APP_VERSION"}-${import.meta.env.VITE_GITHUB_HASH?.slice(0, 6)}`}
+            {`${"APP_VERSION"}-${"0.0.2"}`}
           </button>
         </Tooltip>
 
