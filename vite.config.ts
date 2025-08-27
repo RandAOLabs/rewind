@@ -2,12 +2,22 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
 import { viteSingleFile } from 'vite-plugin-singlefile';
-
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
   plugins: [
     react(),
+    nodePolyfills({
+      include: [
+        'buffer',
+        'process',
+        'util',
+        'events',
+        'stream',
+        'crypto',
+      ],
+    }),
     viteSingleFile(),
     VitePWA({
       disable: true, 
