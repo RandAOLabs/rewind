@@ -1,5 +1,5 @@
 import { Wayfinder, NetworkGatewaysProvider } from '@ar.io/wayfinder-core'
-import { ARIO } from '@ar.io/sdk'
+import { ARIO } from '@ar.io/sdk/web'
 
 const wayfinder = new Wayfinder({
   gatewaysProvider: new NetworkGatewaysProvider({
