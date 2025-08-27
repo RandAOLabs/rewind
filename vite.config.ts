@@ -78,7 +78,7 @@ export default defineConfig({
       }
     },
     // Generate sourcemaps for production
-    sourcemap: true,
+    sourcemap: false,
     // Optimize CSS
     cssCodeSplit: false,
     // Enable asset optimization
