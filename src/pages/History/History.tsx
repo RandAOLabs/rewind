@@ -4,8 +4,8 @@ import FailureView from './FailureView';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
+
 import {
   ARIORewindService,
   BuyNameEvent,
@@ -21,11 +21,15 @@ import {
   StateNoticeEvent,
   SetRecordEvent,
   CreditNoticeEvent,
+  DebitNoticeEvent,
 } from 'ao-js-sdk';
 import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
-import { switchMap, mergeMap, map, catchError, concatMap } from 'rxjs/operators';
+import { switchMap, map, catchError, concatMap } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
+
+// ⤵️ Use your Wayfinder utility (ensure it’s exported from src/wayfinder.ts)
+import { arTxidToHttps } from '../../wayfinder';
 
 function LoadingScreen() {
   return (
@@ -38,7 +42,6 @@ function LoadingScreen() {
 /** Wrap a sync value or Promise into an Observable (undefined-safe). */
 function toObs<T>(v: T | Promise<T> | undefined): Observable<T | undefined> {
   if (v === undefined) return of(undefined as T | undefined);
-  // Force to Promise to normalize sync/async, then "from" it.
   return from(Promise.resolve(v));
 }
 
@@ -70,6 +73,9 @@ export interface AntSnapshot {
   description?: string;
   ticker?: string;
   keywords?: string[];
+  subDomain?: string;
+  purchasePrice?: string;
+  startTime?: number;
 }
 
 export const initialSnapshot: AntSnapshot = {
@@ -85,6 +91,8 @@ export const initialSnapshot: AntSnapshot = {
   description: '',
   ticker: 'ANT',
   keywords: [],
+  purchasePrice: '',
+  startTime: 0,
 };
 
 type SnapshotDelta = Partial<AntSnapshot>;
@@ -124,11 +132,11 @@ function applyDelta(
 
   return {
     ...prev,
-    ...delta, // scalar fields (owner, expiryTs, ttlSeconds, processId, targetId, description, ticker)
+    ...delta,
     controllers: nextControllers ?? [],
     undernames: nextUndernames ?? [],
     contentHashes: nextContentHashes ?? {},
-    keywords: nextKeywords, // may be undefined if you don't use it
+    keywords: nextKeywords,
   };
 }
 
@@ -139,11 +147,13 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     case StateNoticeEvent.name: {
       const e = ev as StateNoticeEvent;
       const records$ = toObs(e.getRecords?.());
-      const contentHashes$ = records$.pipe(map(records => Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))));
-      const undernames$ = records$.pipe(map(records => Object.keys(records)));
-      const target$ = toObs(e.getRecords?.()).pipe(
-        map(records => records['@']?.transactionId),
+      const contentHashes$ = records$.pipe(
+        map(records => Object.fromEntries(
+          Object.entries(records).map(([k, v]) => [k, v.transactionId])
+        ))
       );
+      const undernames$ = records$.pipe(map(records => Object.keys(records)));
+      const target$ = records$.pipe(map(records => records['@']?.transactionId));
       return forkJoin({
         owner:       toObs(e.getOwner?.()),
         targetId:    target$,
@@ -153,7 +163,6 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
         description: toObs(e.getDescription?.()),
         ticker:      toObs(e.getTicker?.()),
         keywords:    toObs(e.getKeywords?.()),
-        // If available in your SDK, add:
         contentHashes: contentHashes$,
         undernames:    undernames$,
       }).pipe(map(stripUndef));
@@ -181,17 +190,8 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     case ReassignNameEvent.name: {
       const e = ev as ReassignNameEvent;
       return forkJoin({
-        newOwner:  toObs((e as any).getNewOwner?.()),
-        initiator: toObs(e.getInitiator?.()),
-        processId: toObs((e as any).getProcessId?.()),
-      }).pipe(
-        map(res =>
-          stripUndef({
-            owner: firstDefined(res.newOwner, res.initiator),
-            processId: res.processId,
-          })
-        )
-      );
+        processId: toObs((e as any).getReassignedProcessId?.()),
+      }).pipe(map(res => stripUndef({ processId: res.processId })));
     }
 
     case ExtendLeaseEvent.name: {
@@ -203,37 +203,48 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
     }
 
     case IncreaseUndernameEvent.name: {
-      // Adapt when you know what the SDK exposes here
-      // e.g., const label$ = toObs((e as any).getUndername?.())
-      return of({} as SnapshotDelta);
+      const e = ev as IncreaseUndernameEvent;
+      return forkJoin({ undernameLimit: toObs(e.getUndernameLimit?.()) }).pipe(
+        map(({ undernameLimit }) => ({ undernameLimit }))
+      );
     }
 
     case SetRecordEvent.name: {
       const e = ev as SetRecordEvent;
-      const tid$ = toObs(e.getTransactionId?.());
       const subDomain$ = toObs(e.getSubDomain?.());
-      const ttl = toObs(e.getTtlSeconds?.()); 
-
-      return forkJoin({ tid: tid$, subDomain: subDomain$, ttl: ttl }).pipe(
-        map(({ tid, subDomain, ttl }) => (subDomain && ttl)
-          ? { contentHashes: { [subDomain]: tid }, ttlSeconds: ttl }
-          : {}
-        )
+      const txid$      = toObs((e as any).getTransactionId?.());
+      return forkJoin({ subDomain: subDomain$, txid: txid$ }).pipe(
+        map(({ subDomain, txid }) => {
+          if (!subDomain || !txid) return {} as SnapshotDelta;
+          const key = subDomain === '' ? '@' : subDomain;
+          const delta: SnapshotDelta = {
+            subDomain: key,
+            contentHashes: { [key]: String(txid) },
+            ...(key === '@'
+              ? { targetId: String(txid) }
+              : { undernames: [key] }
+            ),
+          };
+          return delta;
+        })
       );
     }
 
     case UpgradeNameEvent.name: {
-      // Add process/target adjustments if exposed
       const e = ev as UpgradeNameEvent;
       const startTime = toObs(e.getStartTime?.());
       const getPurchasePrice = toObs(e.getPurchasePrice?.());
       const undernameLimit = toObs(e.getUndernameLimit?.());
-      
-      return of({} as SnapshotDelta);
+      return forkJoin({ startTime, getPurchasePrice, undernameLimit }).pipe(
+        map(({ startTime, getPurchasePrice, undernameLimit }) => ({
+          startTime,
+          getPurchasePrice,
+          undernameLimit,
+        }))
+      );
     }
 
     case ReturnedNameEvent.name: {
-      // Optionally clear owner/etc if your UX wants that
       return of({} as SnapshotDelta);
     }
 
@@ -271,6 +282,7 @@ interface CurrentAntBarProps {
   expiryDate: Date;
   leaseDuration: string;
 }
+
 function CurrentAntBar({
   name,
   expiryTs,
@@ -293,7 +305,7 @@ function CurrentAntBar({
 
   const ellip = (s?: string, keep = 4) => {
     if (!s) return '—';
-    return s.slice(0, keep); // only first N chars
+    return s.slice(0, keep);
   };
 
   const safeLease =
@@ -379,9 +391,12 @@ function CurrentAntBar({
               </span>
             </span>
 
+            {/* Content Target via Wayfinder */}
             <span className="chip" role="listitem">
               <span className="chip-k">Content Target</span>
-              <span className="chip-v">{ellip(targetId)}</span>
+              <span className="chip-v">
+                <TxidLink txid={targetId} label={ellip(targetId)} />
+              </span>
             </span>
 
             <span className="chip" role="listitem">
@@ -397,11 +412,38 @@ function CurrentAntBar({
   );
 }
 
+// ───────────────────────────────────────
+// Wayfinder-powered link (no provider)
+// ───────────────────────────────────────
+function shortTx(id?: string, head = 5, tail = 5) {
+  if (!id) return '—';
+  return id.length <= head + tail + 1 ? id : `${id.slice(0, head)}…${id.slice(-tail)}`;
+}
+function TxidLink({ txid, label }: { txid?: string; label?: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (txid) {
+      arTxidToHttps(txid).then(u => { if (alive) setUrl(u); });
+    } else {
+      setUrl(null);
+    }
+    return () => { alive = false; };
+  }, [txid]);
+
+  if (!txid) return <span>—</span>;
+  const text = label ?? shortTx(txid);
+  return url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer">{text}</a>
+  ) : (
+    <span>{text}</span>
+  );
+}
 
 // ========================================
 
-
-type ExtraItem = { label: string; value: string };
+type ExtraItem = { label: string; value: React.ReactNode };
 type ExtraBox  = { tag: string; items: ExtraItem[] };
 
 function fmtDate(ts?: number) {
@@ -418,60 +460,89 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Purchased ANT Name': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'Expiry',      value: fmtDate(e.snapshot?.expiryTs) },
-      { label: 'Owner',       value: ellip(e.snapshot?.owner) },
-      { label: 'Process',     value: ellip(e.snapshot?.processId) },
+      { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) },
+      { label: 'Owner',   value: ellip(e.snapshot?.owner) },
+      { label: 'Process', value: ellip(e.snapshot?.processId) },
     ],
   }),
 
   'Extended Lease': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'New Expiry',  value: fmtDate(e.snapshot?.expiryTs) },
-      { label: 'TTL',         value: `${e.snapshot?.ttlSeconds ?? 0}s` },
+      { label: 'New Expiry', value: fmtDate(e.snapshot?.expiryTs) },
+      { label: 'TTL',        value: `${e.snapshot?.ttlSeconds ?? 0}s` },
+    ],
+  }),
+
+  'Increased Undername Limit': (e) => ({
+    tag: 'LIMIT',
+    items: [
+      { label: 'New Limit', value: String(e.snapshot?.undernameLimit ?? '—') },
     ],
   }),
 
   'Reassigned ANT Name': (e) => ({
-    tag: 'OWNER',
+    tag: 'PROCESS',
     items: [
-      { label: 'Owner',       value: ellip(e.snapshot?.owner) },
-      { label: 'Controllers', value: (e.snapshot?.controllers ?? []).map(c => ellip(c, 4)).join(', ') || '—' },
+      { label: 'New ANT Process', value: ellip(e.snapshot?.processId) },
     ],
   }),
 
   'State Notice': (e) => ({
     tag: 'STATE',
     items: [
-      { label: 'Process',     value: ellip(e.snapshot?.processId) },
-      { label: 'Target',      value: ellip(e.snapshot?.targetId) },
-      { label: 'Undernames',  value: String(e.snapshot?.undernames?.length ?? 0) },
+      {
+        label: 'Process',
+        value: e.snapshot?.processId ? (
+          <a
+            href={`https://www.ao.link/#/entity/${e.snapshot.processId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {shortTx(e.snapshot.processId)}
+          </a>
+        ) : '—',
+      },
+      {
+        label: 'Target',
+        value: e.snapshot?.targetId ? (
+          <TxidLink txid={e.snapshot.targetId} />
+        ) : '—',
+      },
+      { label: 'Undernames', value: String(e.snapshot?.undernames?.length ?? 0) },
     ],
   }),
 
-  'Set Record': (e) => ({
-    tag: 'RECORD',
+  'Set Record': (e) => {
+    const sub = e.snapshot?.subDomain || '—';
+    const tx  = sub !== '—' ? e.snapshot?.contentHashes?.[sub] : undefined;
+
+    return {
+      tag: 'RECORD',
+      items: [
+        { label: 'Sub Domain', value: sub === '@' ? 'Root (@)' : sub },
+        {
+          label: 'Content Hash',
+          value: tx ? <TxidLink txid={tx} /> : '—',
+        },
+      ],
+    };
+  },
+
+  'Upgrade ANT Name': (e) => ({
+    tag: 'UPGRADE',
     items: [
-      { label: 'Root (@)',    value: ellip(e.snapshot?.contentHashes?.['@']) },
-      { label: 'Labels',      value: Object.keys(e.snapshot?.contentHashes ?? {}).length.toString() },
+      { label: 'Start Time',     value: fmtDate(e.snapshot?.startTime) },
+      { label: 'Purchase Price', value: e.snapshot?.purchasePrice ?? '—' },
     ],
   }),
-
-  // 'Upgrade ANT Name': (e) => ({
-  //   tag: 'UPGRADE',
-  //   items: [
-  //     { label: 'Start Time',  value: fmtDate(e.snapshot?.startTime) },
-  //     { label: 'Purchase Price', value: e.snapshot?.purchasePrice },
-  //     { label: 'Undername Limit', value: e.snapshot?.undernameLimit },
-  //   ],
-  // }),
 
   // Fallback for anything unhandled:
   'default': (e) => ({
     tag: 'INFO',
     items: [
-      { label: 'Tx',          value: ellip(e.txHash) },
-      { label: 'When',        value: fmtDate((e.timestamp ?? 0) * 1000 /* if you stored secs */) },
+      { label: 'Tx',   value: ellip(e.txHash) },
+      { label: 'When', value: fmtDate((e.timestamp ?? 0) * 1000) },
     ],
   }),
 };
@@ -481,35 +552,32 @@ function buildExtraBox(e: TimelineEvent): ExtraBox | undefined {
   return fn?.(e);
 }
 
-
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
 
-
   const [retryToken, setRetryToken] = useState(0);
   const doRetry = () => setRetryToken(t => t + 1);
-  
-  
+
   const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
   // snapshots aligned 1:1 with events as they stream in
   const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
-  // map first occurrence of txHash -> event index (so deduped cards still map to a snapshot)
+  // map first occurrence of txHash -> event index
   const firstIndexByTxHashRef = useRef<Record<string, number>>({});
 
-  // selection state (kept as-is)
+  // selection state
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
-  // ANT detail state (unchanged)
+  // ANT detail state
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
-  // 1️⃣ Refs for pan/zoom and each card
+  // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -524,7 +592,7 @@ export default function History() {
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
-  // fetch ANT detail (unchanged)
+  // fetch ANT detail
   useEffect(() => {
     setAntLoading(true);
     setAntError(null);
@@ -536,7 +604,7 @@ export default function History() {
       .catch(err => setAntError(err.message || 'Failed to load ANT details'))
       .finally(() => setAntLoading(false));
   }, [arnsname, retryToken]);
-  console.log(antDetail);
+
   useEffect(() => {
     setEvents([]);
     setSnapshots([]);
@@ -544,10 +612,10 @@ export default function History() {
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
-  
+
     // Running snapshot lives in the effect (sequentially updated)
     let snap: AntSnapshot = initialSnapshot;
-  
+
     const service = ARIORewindService.autoConfiguration();
     const sub = service
       .getEventHistory$(arnsname)
@@ -557,36 +625,35 @@ export default function History() {
           return EMPTY;
         }),
         switchMap((raw: IARNSEvent[]) => from(raw)),
-  
+
         // Important: keep temporal order
         concatMap((e: IARNSEvent) => {
-          console.log(e);
           // Resolve the small-card UI fields correctly (await getters)
           const actor$     = toObs(e.getInitiator?.());
           const timestamp$ = toObs(e.getEventTimeStamp?.());
           const txHash$    = toObs(e.getEventMessageId?.());
-  
+
           let action = 'Unknown Event';
           let legendKey = 'multiple-changes';
           switch (e.constructor.name) {
-            case BuyNameEvent.name:           action = 'Purchased ANT Name';     legendKey = 'ant-buy-event';          break;
-            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';    legendKey = 'ant-reassign-event';     break;
-            case ReturnedNameEvent.name:      action = 'Returned ANT Name';      legendKey = 'ant-return-event';       break;
-            case ExtendLeaseEvent.name:       action = 'Extended Lease';         legendKey = 'ant-extend-lease-event'; break;
-            case IncreaseUndernameEvent.name: action = 'Added undername';        legendKey = 'undername-creation';     break;
+            case BuyNameEvent.name:           action = 'Purchased ANT Name';         legendKey = 'ant-buy-event';          break;
+            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';        legendKey = 'ant-reassign-event';     break;
+            case ReturnedNameEvent.name:      action = 'Returned ANT Name';          legendKey = 'ant-return-event';       break;
+            case ExtendLeaseEvent.name:       action = 'Extended Lease';             legendKey = 'ant-extend-lease-event'; break;
+            case IncreaseUndernameEvent.name: action = 'Increased Undername Limit';  legendKey = 'undername-creation';     break;
             case RecordEvent.name:            action = 'Updated Mainpage Contents';  legendKey = 'ant-content-change';     break;
-            case SetRecordEvent.name:         action = 'Set Record';             legendKey = 'ant-content-change';     break;
-            case UpgradeNameEvent.name:       action = 'Permanent ANT Purchase';      legendKey = 'ant-upgrade-event';      break;
-            case StateNoticeEvent.name:       action = 'State Notice';           legendKey = 'ant-state-change';       break;
-            case CreditNoticeEvent.name:      action = 'Credit Notice';          legendKey = 'ant-credit-notice';      break;
+            case SetRecordEvent.name:         action = 'Set Record';                 legendKey = 'ant-content-change';     break;
+            case UpgradeNameEvent.name:       action = 'Permanent ANT Purchase';     legendKey = 'ant-upgrade-event';      break;
+            case StateNoticeEvent.name:       action = 'State Notice';               legendKey = 'ant-state-change';       break;
+            case CreditNoticeEvent.name:      action = 'Credit Notice';              legendKey = 'ant-credit-notice';      break;
+            case DebitNoticeEvent.name:       action = 'Debit Notice';               legendKey = 'ant-debit-notice';       break;
           }
-  
           const delta$ = computeDelta$(e);
-  
+
           return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
             map(({ actor, timestamp, txHash, delta }) => {
               snap = applyDelta(snap, delta); // sequentially apply Delta → Snapshot
-              
+
               return {
                 action,
                 actor: actor ?? '',
@@ -595,7 +662,7 @@ export default function History() {
                 txHash: txHash ?? '',
                 rawEvent: e,
                 snapshot: snap, // snapshot as-of this event
-                extraBox: buildExtraBox({ action, actor, legendKey, timestamp, txHash, rawEvent: e, snapshot: snap }),
+                extraBox: buildExtraBox({ action, actor: actor ?? '', legendKey, timestamp: timestamp ?? 0, txHash: txHash ?? '', rawEvent: e, snapshot: snap }),
               } as TimelineEvent;
             })
           );
@@ -615,11 +682,11 @@ export default function History() {
         complete: () => setLoading(false),
         error: () => setLoading(false),
       });
-  
+
     return () => sub.unsubscribe();
   }, [arnsname, retryToken]);
 
-  // After selection paints, pan/zoom to it (unchanged)
+  // After selection paints, pan/zoom to it
   useLayoutEffect(() => {
     if (!selectedEvent) return;
     const node = cardRefs.current[selectedEvent.txHash];
@@ -630,51 +697,48 @@ export default function History() {
 
   if (antLoading || loading) return <LoadingScreen />;
 
-// Before your normal render of chain etc.
-if (!antLoading && (antError || !antDetail)) {
-  return (
-    <div className="history">
-      <FailureView
-        title="Couldn’t load ANT details"
-        message={antError || 'The name may not exist, or the gateway is unavailable.'}
-        onRetry={doRetry}
-        onHome={() => navigate('/')}
-      />
-    </div>
-  );
-}
+  // Before your normal render of chain etc.
+  if (!antLoading && (antError || !antDetail)) {
+    return (
+      <div className="history">
+        <FailureView
+          title="Couldn’t load ANT details"
+          message={antError || 'The name may not exist, or the gateway is unavailable.'}
+          onRetry={doRetry}
+          onHome={() => navigate('/')}
+        />
+      </div>
+    );
+  }
 
-if (error || events.length < 1) {
-  return (
-    <div className="history">
-      <FailureView
-        title={error ? 'Couldn’t load history' : 'No history yet'}
-        message={
-          error
-            ? error
-            : 'We couldn’t find any events for this name. Try another name or retry.'
-        }
-        onRetry={doRetry}
-        onHome={() => navigate('/')}
-      />
-    </div>
-  );
-}
+  if (error || events.length < 1) {
+    return (
+      <div className="history">
+        <FailureView
+          title={error ? 'Couldn’t load history' : 'No history yet'}
+          message={
+            error
+              ? error
+              : 'We couldn’t find any events for this name. Try another name or retry.'
+          }
+          onRetry={doRetry}
+          onHome={() => navigate('/')}
+        />
+      </div>
+    );
+  }
 
   const uniqueMap = new Map<string, TimelineEvent>();
   events.forEach(evt => {
-    if (!uniqueMap.has(evt.txHash)) {
-      uniqueMap.set(evt.txHash, evt);
-    }
+    if (!uniqueMap.has(evt.txHash)) uniqueMap.set(evt.txHash, evt);
   });
 
   const excludedActions = [
-
+    'Credit Notice',
+    'Debit Notice',
   ];
 
-  // Build the timeline cards & make them clickable (unchanged)
-  console.log(events.length);
-  console.log(uniqueMap.size)
+  // Build the timeline cards & make them clickable
   const timelineEvents = Array.from(uniqueMap.values())
     .sort((a, b) => a.timestamp - b.timestamp)
     .filter(st => !excludedActions.includes(st.action))
@@ -710,27 +774,25 @@ if (error || events.length < 1) {
                 </a>
               </span>
             </div>
-            {st.extraBox && (
-            <div className="chain-card-extra">
-              <span className="extra-tag">{st.extraBox.tag}</span>
-              <div className="extra-items">
-                {st.extraBox.items.map((it, idx) => (
-                  <div className="extra-item" key={idx}>
-                    <span className="extra-key">{it.label}</span>
-                    <span className="extra-sep">:</span>
-                    <span className="extra-value">{it.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
+            {st.extraBox && (
+              <div className="chain-card-extra">
+                <span className="extra-tag">{st.extraBox.tag}</span>
+                <div className="extra-items">
+                  {st.extraBox.items.map((it, idx) => (
+                    <div className="extra-item" key={idx}>
+                      <span className="extra-key">{it.label}</span>
+                      <span className="extra-sep">:</span>
+                      <span className="extra-value">{it.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )
       };
     });
-
-
 
   return (
     <div className="history">
@@ -755,7 +817,7 @@ if (error || events.length < 1) {
             <span className="dot ant-renewal" /> Lease Renewal
           </div>
           <div className="legend-item">
-            <span className="dot undername-creation" /> Undername Creation
+            <span className="dot undername-creation" /> Undername Increase
           </div>
           <div className="legend-item">
             <span className="dot ant-controller-addition" /> Controller Addition
@@ -784,12 +846,12 @@ if (error || events.length < 1) {
           controllers={antDetail.controllers}
           owner={antDetail.owner}
           ttlSeconds={antDetail.ttlSeconds}
-          logoTxId={antDetail.logoTxId} 
-          records={antDetail.records} 
-          targetId={antDetail.targetId} 
-          undernameLimit={antDetail.undernameLimit} 
-          expiryDate={antDetail.expiryDate} 
-          onBack={() => navigate(-2)} 
+          logoTxId={antDetail.logoTxId}
+          records={antDetail.records}
+          targetId={antDetail.targetId}
+          undernameLimit={antDetail.undernameLimit}
+          expiryDate={antDetail.expiryDate}
+          onBack={() => navigate(-2)}
         />
       )}
 
@@ -808,8 +870,6 @@ if (error || events.length < 1) {
           initialPositionX={200}
           initialPositionY={125}
         >
-
-
           {({ zoomIn, zoomOut, resetTransform }) => (
             <>
               <div className="chain-controls">
@@ -822,15 +882,14 @@ if (error || events.length < 1) {
                 contentStyle={{ width: '100%', height: '100%' }}
               >
                 <div className="chain-container">
-                    {timelineEvents.map(ev => (
-                      <div key={ev.key} className="chain-item">
-                        {ev.content}
-                      </div>
-                    ))}
+                  {timelineEvents.map(ev => (
+                    <div key={ev.key} className="chain-item">
+                      {ev.content}
+                    </div>
+                  ))}
                 </div>
               </TransformComponent>
             </>
-
           )}
         </TransformWrapper>
       </div>
