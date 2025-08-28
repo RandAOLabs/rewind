@@ -295,11 +295,6 @@ function CurrentAntBar({
     return s.slice(0, keep);
   };
 
-  const safeLease =
-    typeof leaseDuration === 'string' && leaseDuration.trim() && !/NaN/i.test(leaseDuration)
-      ? leaseDuration
-      : '—';
-
   const ctrls = controllers ?? [];
 
   return (
@@ -448,7 +443,16 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     tag: 'LEASE',
     items: [
       { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) == '—' ? 'PermaBuy' : fmtDate(e.snapshot?.expiryTs) },
-      { label: 'Owner',   value: ellip(e.snapshot?.owner) },
+      { label: 'Owner',   value: e.snapshot?.owner ? (
+        <a
+          href={`https://www.ao.link/#/entity/${e.snapshot.owner}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {shortTx(e.snapshot.owner)}
+        </a>
+        ) : '—',
+      },
       { label: 'Process', value: ellip(e.snapshot?.processId) == '—' ? 'Not Yet Known' : ellip(e.snapshot?.processId) },
     ],
   }),
