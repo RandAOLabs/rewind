@@ -60,7 +60,7 @@ export default function Home() {
           <div className="hint">Press <kbd>Enter</kbd> to search</div>
 
           <div className="suggestions" role="list">
-            {['hoodrats', 'randao'].map(s => (
+            {['flowweave','infinitely', 'randao' ].map(s => (
               <button
                 key={s}
                 className="suggestion-chip"
