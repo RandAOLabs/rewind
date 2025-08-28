@@ -554,12 +554,13 @@
   width: 100%;
 }
 .event-detail-header .sub > span { display: block; position: static; }
-.event-detail-header .sub .legend-square {
-  grid-column: 1 / 2;
-  grid-row: 1 / span 2;
-  width: 12px; height: 12px; border-radius: 3px;
+.event-title .legend-square {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  padding-right: 8px;
+  border-radius: 3px;
   border: 1px solid rgba(255,255,255,0.15);
-  margin-top: 2px;
 }
 .event-detail-header .sub .actor {
   grid-column: 2 / 3; grid-row: 1 / 2;
