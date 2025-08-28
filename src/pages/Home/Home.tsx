@@ -7,13 +7,9 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
-  // Called on form submit or button click
   const goToDetail = () => {
     const name = query.trim().toLowerCase();
-    if (name) {
-      // adjust this path to match your router
-      navigate(`/history/${encodeURIComponent(name)}`);
-    }
+    if (name) navigate(`/history/${encodeURIComponent(name)}`);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -21,36 +17,65 @@ export default function Home() {
     goToDetail();
   };
 
-  return (
+  // optional, click a suggestion to fill + search
+  const useSuggestion = (s: string) => {
+    setQuery(s);
+    navigate(`/history/${encodeURIComponent(s)}`);
+  };
 
+  return (
     <div className="home">
+      {/* soft animated aurora */}
+      <div className="home-aurora" aria-hidden="true" />
 
       <main className="hero">
-        <h1 className="title">Search Name History</h1>
-        <p className="subtitle">
-          View the historical ownership and site changes of ar.io domains and undernames.
-        </p>
+        <section className="hero-card">
+          <h1 className="title">
+            <span className="title-fade">Search</span> Name History
+          </h1>
+          <p className="subtitle">
+            Explore ownership and content changes across ar.io names and undernames.
+          </p>
 
-        <form className="search-container" onSubmit={onSubmit}>
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search for a name"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="search-button"
-            aria-label="Search"
-            onClick={goToDetail}
-          >
-            <span className="icon search" />
-          </button>
-        </form>
+          <form className="search-container" onSubmit={onSubmit}>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Enter a name (e.g. example)"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              aria-label="Search for a name"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="search-button"
+              aria-label="Search"
+              onClick={goToDetail}
+            >
+              <span className="icon search" />
+            </button>
+          </form>
+
+          <div className="hint">Press <kbd>Enter</kbd> to search</div>
+
+          <div className="suggestions" role="list">
+            {['ario', 'hoodrats', 'randao'].map(s => (
+              <button
+                key={s}
+                className="suggestion-chip"
+                role="listitem"
+                onClick={() => useSuggestion(s)}
+                aria-label={`Search ${s}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </section>
       </main>
 
-    <Footer />
+      <Footer />
     </div>
   );
 }

@@ -54,13 +54,13 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
 
   const metaChips = snap
     ? [
-        {
-          k: 'Expiry',
-          v: snap.expiryTs
-            ? new Date(snap.expiryTs * 1000).toLocaleDateString()
-            : '—',
-        },
-        { k: 'TTL', v: `${snap.ttlSeconds ?? 0}s` },
+        // {
+        //   k: 'Expiry',
+        //   v: snap.expiryTs
+        //     ? new Date(snap.expiryTs * 1000).toLocaleDateString()
+        //     : '—',
+        // },
+        //{ k: 'TTL', v: `${snap.ttlSeconds ?? 0}s` },
         { k: 'Undernames', v: String(snap.undernames?.length ?? 0) },
         { k: 'Labels', v: String(Object.keys(snap.contentHashes ?? {}).length) },
       ]
