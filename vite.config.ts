@@ -70,13 +70,8 @@ export default defineConfig({
   build: {
 
     // Enable minification
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    },
+    minify: false,
+    
     // Generate sourcemaps for production
     sourcemap: false,
     // Optimize CSS
@@ -88,9 +83,9 @@ export default defineConfig({
   },
   // Enable SWC minification
   esbuild: {
-    minifyIdentifiers: true,
-    minifySyntax: true,
-    minifyWhitespace: true
+    // minifyIdentifiers: true,
+    // minifySyntax: true,
+    // minifyWhitespace: true
   },
   // Optimize dev server
   server: {
