@@ -47,14 +47,14 @@ export default function Footer() {
             className="footer-button"
             onClick={() => setShowChangeLog(true)}
           >
-            {`${"APP_VERSION"}-${"0.0.14"}`}
+            {`${"APP_VERSION"}-${"0.4.15"}`}
           </button>
         </Tooltip>
 
         <Tooltip title="GitHub" placement="top" color="var(--text-faded)">
           <button
             className="footer-icon-button"
-            onClick={() => window.open('https://github.com/ar-io/', '_blank')}
+            onClick={() => window.open('https://github.com/RandAOLabs/rewind', '_blank')}
           >
             <FaGithub className="footer-icon" />
           </button>
@@ -63,7 +63,7 @@ export default function Footer() {
         <Tooltip title="Discord" placement="top" color="var(--text-faded)">
           <button
             className="footer-icon-button"
-            onClick={() => window.open("ARIO_DISCORD_LINK", '_blank')}
+            onClick={() => window.open("https://discord.gg/JVM24Evz", '_blank')}
           >
             <FaDiscord className="footer-icon" />
           </button>
