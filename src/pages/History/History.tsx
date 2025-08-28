@@ -813,9 +813,6 @@ export default function History() {
             <span className="dot ant-upgrade-event" /> ANT Upgrade
           </div>
           <div className="legend-item">
-            <span className="dot ant-content-change" /> Content Change
-          </div>
-          <div className="legend-item">
             <span className="dot ant-renewal" /> Lease Renewal
           </div>
           <div className="legend-item">
@@ -826,9 +823,6 @@ export default function History() {
           </div>
           <div className="legend-item">
             <span className="dot undername-content-change" /> Undername Content Change
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-state-change" /> State Change
           </div>
           <div className="legend-item">
             <span className="dot ant-extend-lease-event" /> Extend Lease
