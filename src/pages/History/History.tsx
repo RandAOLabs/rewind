@@ -319,7 +319,7 @@ function CurrentAntBar({
           <div className="cab-chips" role="list">
             <span className="chip" role="listitem">
               <span className="chip-k">Expiry</span>
-              <span className="chip-v">{fmt(expiryTs)}</span>
+              <span className="chip-v">{fmt(expiryTs) == '—' ? 'PermaBuy' : fmt(expiryTs)}</span>
             </span>
 
             {/* Process (clickable) */}
@@ -447,7 +447,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Purchased ANT Name': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) ? '-' : 'PermaBuy' },
+      { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) == '—' ? 'PermaBuy' : fmtDate(e.snapshot?.expiryTs) },
       { label: 'Owner',   value: ellip(e.snapshot?.owner) },
       { label: 'Process', value: ellip(e.snapshot?.processId) },
     ],
@@ -456,7 +456,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Extended Lease': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'New Expiry', value: fmtDate(e.snapshot?.expiryTs) ? '-' : 'PermaBuy' },
+      { label: 'New Expiry', value: fmtDate(e.snapshot?.expiryTs) == '—' ? 'PermaBuy' : fmtDate(e.snapshot?.expiryTs) },
     ],
   }),
 
@@ -722,7 +722,8 @@ export default function History() {
   const excludedActions = [
     'Credit Notice',
     'Debit Notice',
-    'Returned ANT Name'
+    'Returned ANT Name',
+    'State Notice'
   ];
 
   // Build the timeline cards & make them clickable
