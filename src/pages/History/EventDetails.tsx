@@ -61,40 +61,21 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
         //     : '—',
         // },
         //{ k: 'TTL', v: `${snap.ttlSeconds ?? 0}s` },
-        { k: 'Undernames', v: String(snap.undernames?.length ?? 0) },
-        { k: 'Labels', v: String(Object.keys(snap.contentHashes ?? {}).length) },
+        //{ k: 'Undernames', v: String(snap.undernames?.length ?? 0) },
+        // { k: 'Labels', v: String(Object.keys(snap.contentHashes ?? {}).length) },
       ]
     : [];
 
   return (
     <div className="event-detail">
       <div className="event-detail-header">
-        <h3 className="event-title">{uiEvent.action}</h3>
+        <h3 className="event-title">
+          {uiEvent.action}
+          {/* <span className={`legend-square ${uiEvent.legendKey}`} style={{ marginLeft: 8 }} /> */}
+        </h3>
         <div className="sub">
-          <span className={`legend-square ${uiEvent.legendKey}`} />
-          <span className="actor">Actor: {uiEvent.actor}</span>
           <span className="date">{fmtDateTime(uiEvent.timestamp)}</span>
         </div>
-        <div className="txline">
-          <span>Tx:</span>{' '}
-          <a
-            href={`https://www.ao.link/#/message/${uiEvent.txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {shorten(uiEvent.txHash)}
-          </a>
-        </div>
-        {!!metaChips.length && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {metaChips.map(({ k, v }) => (
-              <span key={k} className="chip">
-                <span className="chip-k">{k}</span>
-                <span className="chip-v">{v}</span>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="event-detail-section">

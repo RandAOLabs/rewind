@@ -449,7 +449,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     items: [
       { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) == '—' ? 'PermaBuy' : fmtDate(e.snapshot?.expiryTs) },
       { label: 'Owner',   value: ellip(e.snapshot?.owner) },
-      { label: 'Process', value: ellip(e.snapshot?.processId) },
+      { label: 'Process', value: ellip(e.snapshot?.processId) == '—' ? 'Not Yet Known' : ellip(e.snapshot?.processId) },
     ],
   }),
 
@@ -467,7 +467,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     ],
   }),
 
-  'Reassigned ANT Name': (e) => ({
+  'ANT Process Change': (e) => ({
     tag: 'PROCESS',
     items: [
       { label: 'New ANT Process', value: ellip(e.snapshot?.processId) },
@@ -498,12 +498,12 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     ],
   }),
 
-  'Set Record': (e) => {
+  'Set Record Content': (e) => {
     const sub = e.snapshot?.subDomain || '—';
     const tx  = sub !== '—' ? e.snapshot?.contentHashes?.[sub] : undefined;
 
     return {
-      tag: 'RECORD',
+      tag: 'CONTENT',
       items: [
         { label: 'Sub Domain', value: sub === '@' ? 'Root (@)' : sub },
         {
@@ -514,14 +514,22 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     };
   },
 
-  'Upgrade ANT Name': (e) => ({
+  'Permanent ANT Purchase': (e) => ({
     tag: 'UPGRADE',
     items: [
-      { label: 'Start Time',     value: fmtDate(e.snapshot?.startTime) },
       { label: 'Purchase Price', value: e.snapshot?.purchasePrice ?? '—' },
     ],
   }),
 
+  'Updated Mainpage Contents': (e) => {
+    const tx = e.snapshot?.contentHashes?.['@'];
+    return {
+      tag: 'UPDATE',
+      items: [
+        { label: 'Content Hash', value: tx ? <TxidLink txid={tx} /> : '—' },
+      ],
+    };
+  },
   // Fallback for anything unhandled:
   'default': (e) => ({
     tag: 'INFO',
@@ -622,12 +630,12 @@ export default function History() {
           let legendKey = 'multiple-changes';
           switch (e.constructor.name) {
             case BuyNameEvent.name:           action = 'Purchased ANT Name';         legendKey = 'ant-buy-event';          break;
-            case ReassignNameEvent.name:      action = 'Reassigned ANT Name';        legendKey = 'ant-reassign-event';     break;
+            case ReassignNameEvent.name:      action = 'ANT Process Change';        legendKey = 'ant-reassign-event';     break;
             case ReturnedNameEvent.name:      action = 'Returned ANT Name';          legendKey = 'ant-return-event';       break;
             case ExtendLeaseEvent.name:       action = 'Extended Lease';             legendKey = 'ant-extend-lease-event'; break;
             case IncreaseUndernameEvent.name: action = 'Increased Undername Limit';  legendKey = 'undername-creation';     break;
-            case RecordEvent.name:            action = 'Updated Mainpage Contents';  legendKey = 'ant-content-change';     break;
-            case SetRecordEvent.name:         action = 'Set Record';                 legendKey = 'ant-content-change';     break;
+            case RecordEvent.name:            action = 'RecordEvent';  legendKey = 'ant-content-change';     break;
+            case SetRecordEvent.name:         action = 'Set Record Content';                 legendKey = 'ant-content-change';     break;
             case UpgradeNameEvent.name:       action = 'Permanent ANT Purchase';     legendKey = 'ant-upgrade-event';      break;
             case StateNoticeEvent.name:       action = 'State Notice';               legendKey = 'ant-state-change';       break;
             case CreditNoticeEvent.name:      action = 'Credit Notice';              legendKey = 'ant-credit-notice';      break;
@@ -723,7 +731,9 @@ export default function History() {
     'Credit Notice',
     'Debit Notice',
     'Returned ANT Name',
-    'State Notice'
+    'RecordEvent',
+    'State Notice',
+    'Unknown Event'
   ];
 
   // Build the timeline cards & make them clickable
