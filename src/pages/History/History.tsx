@@ -28,7 +28,6 @@ import { switchMap, map, catchError, concatMap } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
-// ⤵️ Use your Wayfinder utility (ensure it’s exported from src/wayfinder.ts)
 import { arTxidToHttps } from '../../wayfinder';
 
 function LoadingScreen() {
@@ -39,19 +38,16 @@ function LoadingScreen() {
   );
 }
 
-/** Wrap a sync value or Promise into an Observable (undefined-safe). */
 function toObs<T>(v: T | Promise<T> | undefined): Observable<T | undefined> {
   if (v === undefined) return of(undefined as T | undefined);
   return from(Promise.resolve(v));
 }
 
-/** Remove keys whose value is strictly undefined (keeps null). */
 function stripUndef<T extends Record<string, any>>(o: T): Partial<T> {
   const entries = Object.entries(o).filter(([, v]) => v !== undefined);
   return Object.fromEntries(entries) as Partial<T>;
 }
 
-/** Pick the first non-undefined value. */
 function firstDefined<T>(...vals: Array<T | undefined>): T | undefined {
   for (const v of vals) if (v !== undefined) return v;
   return undefined;
@@ -99,14 +95,6 @@ type SnapshotDelta = Partial<AntSnapshot>;
 
 function uniq(arr: string[] = []) { return Array.from(new Set(arr)); }
 
-/**
- * Default behavior:
- *  - arrays are UNIONed
- *  - objects (contentHashes) are MERGED (prev ... delta)
- * If opts.authoritative === true:
- *  - arrays are REPLACED
- *  - objects are REPLACED
- */
 function applyDelta(
   prev: AntSnapshot,
   delta: Partial<AntSnapshot>,
@@ -141,7 +129,6 @@ function applyDelta(
 }
 
 
-/** Resolve only the fields you want to carry forward for each event type. */
 function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
   switch (ev.constructor.name) {
     case StateNoticeEvent.name: {
@@ -509,7 +496,6 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
           <TxidLink txid={e.snapshot.targetId} />
         ) : '—',
       },
-      { label: 'Undernames', value: String(e.snapshot?.undernames?.length ?? 0) },
     ],
   }),
 

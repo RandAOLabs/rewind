@@ -49,10 +49,10 @@
 
 /* zoom/pan controls */
 .chain-controls {
-  position: absolute;
-  top: 2.5rem;
+  position: fixed;
+  top: calc(var(--current-ant-height) + 0.76rem);
   right: 1rem;
-  z-index: 1002;
+  z-index: 1000000000000000020000;
 }
 .chain-controls button {
   margin: 0 0.25rem;
@@ -303,19 +303,15 @@
   font-size: 14px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-
 /* ===== Aurora Glass ANT Bar ===== */
 .current-ant-bar {
   position: fixed; top: var(--header-height); left: 0; right: 0;
   height: var(--current-ant-height);
-  z-index: 100100;
   pointer-events: none; /* inner handles interaction */
 }
 .current-ant-bar .cab-aurora {
   position: absolute; inset: 0;
-  background:
-    radial-gradient(80% 180% at 10% 50%, rgba(99,102,241,0.30), transparent 60%),
-    radial-gradient(80% 180% at 90% 50%, rgba(16,185,129,0.22), transparent 60%);
+  
   filter: blur(18px); opacity: 0.85; pointer-events: none;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -335,10 +331,10 @@
 
 /* Main panel */
 .current-ant-bar .cab-main {
-  width: min(1200px, 96vw);
+  width: fit-content;
   height: calc(var(--current-ant-height) - 14px);
   position: relative;
-  display: flex; align-items: center;
+  display: flex; align-items: center; justify-content: center; /* center baseline */
   padding: 0 14px; overflow: hidden;
 
   background: var(--glass-bg);
@@ -351,10 +347,19 @@
     0 8px 30px rgba(0,0,0,0.40);
 }
 
-/* Left: name block */
+/* NEW: a single centered group that includes name + chips */
+.cab-center {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 12px;
+  /* guard so the back button doesn't visually overlap on narrow widths */
+  padding-left: 56px;
+  white-space: nowrap;
+}
+
+/* Name block (no left padding anymore) */
 .cab-name {
-  display: flex; align-items: center; gap: 10px;
-  padding-left: 48px; min-width: 0; z-index: 1;
+  display: inline-flex; align-items: center; gap: 10px;
+  min-width: 0;
 }
 .cab-label {
   font-size: 0.75rem; font-weight: 700; letter-spacing: .02em;
@@ -368,11 +373,9 @@
   max-width: 28ch; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* Centered chip row */
+/* Chips are now just inline-flex inside the centered group */
 .cab-chips {
-  position: absolute; left: 50%; transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 8px;
-  white-space: nowrap;
 }
 .chip {
   display: inline-flex; align-items: baseline; gap: 6px;
@@ -391,7 +394,7 @@
 .chip-v a { color: var(--link); text-decoration: none; font-weight: 600; }
 .chip-v a:hover { text-decoration: underline; color: var(--link-hover); }
 
-/* Back button */
+/* Back button (unchanged) */
 .current-ant-bar .back-button {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
   display: grid; place-items: center;
