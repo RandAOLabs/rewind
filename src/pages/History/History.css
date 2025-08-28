@@ -360,6 +360,7 @@
 .cab-name {
   display: inline-flex; align-items: center; gap: 10px;
   min-width: 0;
+  padding-right: 0.5rem;
 }
 .cab-label {
   font-size: 0.75rem; font-weight: 700; letter-spacing: .02em;
