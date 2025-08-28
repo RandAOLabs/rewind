@@ -447,7 +447,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Purchased ANT Name': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) },
+      { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) ? '-' : 'PermaBuy' },
       { label: 'Owner',   value: ellip(e.snapshot?.owner) },
       { label: 'Process', value: ellip(e.snapshot?.processId) },
     ],
@@ -456,8 +456,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Extended Lease': (e) => ({
     tag: 'LEASE',
     items: [
-      { label: 'New Expiry', value: fmtDate(e.snapshot?.expiryTs) },
-      { label: 'TTL',        value: `${e.snapshot?.ttlSeconds ?? 0}s` },
+      { label: 'New Expiry', value: fmtDate(e.snapshot?.expiryTs) ? '-' : 'PermaBuy' },
     ],
   }),
 
@@ -634,6 +633,7 @@ export default function History() {
             case CreditNoticeEvent.name:      action = 'Credit Notice';              legendKey = 'ant-credit-notice';      break;
             case DebitNoticeEvent.name:       action = 'Debit Notice';               legendKey = 'ant-debit-notice';       break;
           }
+          console.log(e); 
           const delta$ = computeDelta$(e);
 
           return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
@@ -722,6 +722,7 @@ export default function History() {
   const excludedActions = [
     'Credit Notice',
     'Debit Notice',
+    'Returned ANT Name'
   ];
 
   // Build the timeline cards & make them clickable
