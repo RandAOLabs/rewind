@@ -47,7 +47,7 @@ export default function Footer() {
             className="footer-button"
             onClick={() => setShowChangeLog(true)}
           >
-            {`${"APP_VERSION"}-${"0.4.18"}`}
+            {`${"APP_VERSION"}-${"0.1.17"}`}
           </button>
         </Tooltip>
 
