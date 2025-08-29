@@ -693,6 +693,20 @@ export default function History() {
     }
   }, [selectedEvent]);
 
+  // Multi-select legend filter: when empty, show all
+  const [activeLegend, setActiveLegend] = useState<Set<string>>(new Set());
+
+  const toggleLegend = (k: string) => {
+    setActiveLegend(prev => {
+      const next = new Set(prev);
+      next.has(k) ? next.delete(k) : next.add(k);
+      return next;
+    });
+  };
+
+  // Optional: quick reset
+  const clearLegend = () => setActiveLegend(new Set());
+
   if (antLoading || loading) return <LoadingScreen />;
 
   // Before your normal render of chain etc.
@@ -739,9 +753,15 @@ export default function History() {
     'State Notice',
     'Unknown Event'
   ];
+  const baseEvents = Array.from(uniqueMap.values());
+
+  // Only show events whose legendKey is selected; if none selected, show all
+  const visibleEvents = activeLegend.size === 0
+    ? baseEvents
+    : baseEvents.filter(e => activeLegend.has(e.legendKey));
 
   // Build the timeline cards & make them clickable
-  const timelineEvents = Array.from(uniqueMap.values())
+  const timelineEvents = visibleEvents
     .sort((a, b) => a.timestamp - b.timestamp)
     .filter(st => !excludedActions.includes(st.action))
     .map((st, i) => {
@@ -803,32 +823,35 @@ export default function History() {
         <h4>Legend</h4>
         <div className="legend-section">
           <div className="legend-title">Event Legend:</div>
-          <div className="legend-item">
-            <span className="dot ant-buy-event" /> ANT Purchase
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-ownership-transfer" /> Ownership Transfer
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-upgrade-event" /> ANT Upgrade
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-renewal" /> Lease Renewal
-          </div>
-          <div className="legend-item">
-            <span className="dot undername-creation" /> Undername Increase
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-controller-addition" /> Controller Addition
-          </div>
-          <div className="legend-item">
-            <span className="dot undername-content-change" /> Undername Content Change
-          </div>
-          <div className="legend-item">
-            <span className="dot ant-extend-lease-event" /> Extend Lease
+          {[
+            { key: 'ant-buy-event',           label: 'ANT Purchase' },
+            { key: 'ant-reassign-event',      label: 'ANT Process Change' },
+            { key: 'ant-upgrade-event',       label: 'ANT Upgrade' },
+            { key: 'ant-content-change',      label: 'Content Change' },
+            { key: 'undername-creation',      label: 'Undername Increase' },
+            { key: 'ant-controller-addition', label: 'Controller Addition' },
+            { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              className={`legend-item-btn ${activeLegend.has(key) ? 'active' : ''}`}
+              onClick={() => toggleLegend(key)}
+              aria-pressed={activeLegend.has(key)}
+            >
+              <span className={`legend-swatch ${key}`} />
+              <span className="legend-label">{label}</span>
+            </button>
+          ))}
+
+          <div className="legend-actions">
+            <button type="button" className="legend-reset" onClick={clearLegend}>
+              Show All
+            </button>
           </div>
         </div>
       </div>
+
 
       {/* Fixed ANT Bar */}
       {antDetail  && (

@@ -151,8 +151,7 @@
 }
 .txid a:hover,
 .tx-link:hover { color: var(--link-hover); }
-
-/* ================= Legend Styles ================= */
+/* ================= Legend (click-to-filter) ================= */
 .legend {
   position: fixed;
   top: calc(var(--header-height) + 5rem);
@@ -163,55 +162,98 @@
   color: #fff;
   font-size: 0.9rem;
   z-index: 1003;
-  max-width: 150px;
+  max-width: 190px;
   border: 1px solid var(--accent);
 }
+
 .legend h4 {
   margin: 0 0 0.5rem;
   font-size: 1rem;
   border-bottom: 1px solid #444;
   padding-bottom: 0.25rem;
 }
+
 .legend-section { margin-top: 0.5rem; }
 .legend-title { font-weight: 700; margin-bottom: 0.25rem; }
-.legend-item { display: flex; align-items: center; margin: 0.25rem 0; }
-.legend-item .dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  display: inline-block; margin-right: 0.5rem;
+
+/* Button rows */
+.legend-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.25rem 0;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #e5e7eb;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
 }
 
-/* Legend dot colors */
-.dot.ant-ownership-transfer    { background: #FFD700; }
-.dot.ant-content-change        { background: #1E90FF; }
-.dot.ant-renewal               { background: #32CD32; }
-.dot.undername-creation        { background: #bd68bd; }
-.dot.ant-controller-addition   { background: #C71585; }
-.dot.undername-content-change  { background: #FFA500; }
-.dot.ant-upgrade-event         { background: #98dda4; }
-.dot.ant-state-change          { background: #896dd4; }
-.dot.ant-buy-event             { background: #ff004c; }
-.dot.ant-extend-lease-event    { background: #2baa99; }
+.legend-item-btn:hover {
+  border-color: rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+}
 
-/* Card legend squares */
-.legend-square.ant-ownership-transfer  { background: #ff004c; }
-.legend-square.ant-content-change      { background: #1E90FF; }
-.legend-square.ant-renewal             { background: #32CD32; }
-.legend-square.undername-creation      { background: #00CED1; }
-.legend-square.ant-controller-addition { background: #C71585; }
-.legend-square.ant-reassign-event      { background: #FFD700; }
-.legend-square.ant-return-event        { background: #d3d1cc; }
-.legend-square.ant-buy-event           { background: #FFA500; }
-.legend-square.ant-state-change        { background: #896dd4; }
-.legend-square.ant-upgrade-event       { background: #98dda4; }
-.legend-square.text-change             { background: orange; }
-.legend-square.address-change          { background: cyan; }
-.legend-square.resolver-changed        { background: yellow; }
-.legend-square.content-hash            { background: magenta; }
-.legend-square.multiple-changes        { background: purple; }
-.legend-square.added-records           { background: green; }
-.legend-square.updated-records         { background: blue; }
-.legend-square.removed-records         { background: red; }
+.legend-item-btn.active {
+  border-color: var(--accent);
+  background: rgba(132, 233, 228, 0.08);
+  box-shadow: 0 0 0 1px rgba(132,233,228,0.15) inset;
+}
 
+/* Swatch that reuses card colors */
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;          /* square like the card key */
+  display: inline-block;
+  border: 1px solid rgba(255,255,255,0.2);
+  flex: 0 0 auto;
+}
+
+/* Optional subtle label style */
+.legend-label { flex: 1 1 auto; }
+
+.legend-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  justify-content: center;
+}
+
+.legend-reset {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: #e5e7eb;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.legend-reset:hover {
+  background: rgba(132, 233, 228, 0.15);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(132, 233, 228, 0.35);
+}
+
+/* ── COLOR MAP (shared with card keys) ── */
+/* Make the color classes apply to BOTH .legend-square (cards) and .legend-swatch (legend) */
+
+.legend-square.ant-reassign-event,      .legend-swatch.ant-reassign-event      { background: #ff004c; }
+.legend-square.ant-content-change,      .legend-swatch.ant-content-change      { background: #1E90FF; }
+.legend-square.undername-creation,      .legend-swatch.undername-creation      { background: #00CED1; }
+.legend-square.ant-controller-addition, .legend-swatch.ant-controller-addition { background: #C71585; }
+.legend-square.ant-buy-event,           .legend-swatch.ant-buy-event           { background: #FFA500; }
+.legend-square.ant-state-change,        .legend-swatch.ant-state-change        { background: #896dd4; }
+.legend-square.ant-upgrade-event,       .legend-swatch.ant-upgrade-event       { background: #98dda4; }
+.legend-square.ant-extend-lease-event,  .legend-swatch.ant-extend-lease-event  { background: #ffd000; }
 /* monospace helper */
 .controller { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
 
