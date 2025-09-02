@@ -1,0 +1,85 @@
+name: PR Validation
+
+# Trigger on pull requests to main/master branches
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Type check
+        run: npm run type-check
+        continue-on-error: false
+
+      - name: Build project
+        run: npm run build
+        env:
+          # Use a dummy GA4 ID for build validation
+          VITE_GA4_MEASUREMENT_ID: G-XXXXXXXXXX
+
+      - name: Check build output
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: Build output directory 'dist' not found"
+            exit 1
+          fi
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: index.html not found in build output"
+            exit 1
+          fi
+          echo "✅ Build validation successful"
+
+  # Optional: Add a job to check for common issues
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          echo "Checking for TODO/FIXME comments..."
+          if grep -r "TODO\|FIXME" src/ --exclude-dir=node_modules || true; then
+            echo "⚠️  Found TODO/FIXME comments - consider addressing them"
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+
+      - name: Check bundle size
+        run: |
+          npm run build
+          echo "📦 Build completed - checking bundle size..."
+          du -sh dist/
+        env:
+          VITE_GA4_MEASUREMENT_ID: G-XXXXXXXXXX
