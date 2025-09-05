@@ -5,6 +5,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
+import Holobar from './Holobar/Holobar';
+import { HOLOBAR_MINIMAL } from './Holobar/holobarConfig';
 
 import {
   ARIORewindService,
@@ -23,8 +25,8 @@ import {
   CreditNoticeEvent,
   DebitNoticeEvent,
 } from 'ao-js-sdk';
-import { from, forkJoin, of, Observable, EMPTY } from 'rxjs';
-import { switchMap, map, catchError, concatMap } from 'rxjs/operators';
+import { from, forkJoin, of, Observable, EMPTY, firstValueFrom } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
 
@@ -95,6 +97,25 @@ type SnapshotDelta = Partial<AntSnapshot>;
 
 function uniq(arr: string[] = []) { return Array.from(new Set(arr)); }
 
+/** prevent empties (""/0) from wiping good state */
+function sanitizeDelta<T extends Record<string, any>>(delta: T): Partial<T> {
+  const out: any = {};
+  for (const [k, v] of Object.entries(delta)) {
+    if (v === undefined || v === null) continue;             // prevent wiping with undefined/null
+    if (
+      (k === 'owner' || k === 'processId' || k === 'targetId' ||
+       k === 'description' || k === 'ticker' || k === 'purchasePrice' ||
+       k === 'subDomain') && v === ''
+    ) continue;                                              // omit empty strings for identity-ish fields
+    if (
+      (k === 'expiryTs' || k === 'ttlSeconds' || k === 'undernameLimit' || k === 'startTime') &&
+      (v === 0 || v === '0')
+    ) continue;                                              // omit zero-ish sentinels
+    out[k] = v;
+  }
+  return out;
+}
+
 function applyDelta(
   prev: AntSnapshot,
   delta: Partial<AntSnapshot>,
@@ -128,19 +149,20 @@ function applyDelta(
   };
 }
 
-
 function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
   switch (ev.constructor.name) {
     case StateNoticeEvent.name: {
       const e = ev as StateNoticeEvent;
       const records$ = toObs(e.getRecords?.());
+
       const contentHashes$ = records$.pipe(
-        map(records => Object.fromEntries(
-          Object.entries(records).map(([k, v]) => [k, v.transactionId])
-        ))
+        map(records => records
+          ? Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.transactionId]))
+          : {})
       );
-      const undernames$ = records$.pipe(map(records => Object.keys(records)));
-      const target$ = records$.pipe(map(records => records['@']?.transactionId));
+      const undernames$ = records$.pipe(map(records => records ? Object.keys(records) : []));
+      const target$     = records$.pipe(map(records => records?.['@']?.transactionId));
+
       return forkJoin({
         owner:       toObs(e.getOwner?.()),
         targetId:    target$,
@@ -152,7 +174,10 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
         keywords:    toObs(e.getKeywords?.()),
         contentHashes: contentHashes$,
         undernames:    undernames$,
-      }).pipe(map(stripUndef));
+      }).pipe(
+        map(stripUndef),
+        map(sanitizeDelta)
+      );
     }
 
     case BuyNameEvent.name: {
@@ -170,7 +195,8 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
             processId: res.processId,
             expiryTs:  firstDefined(res.leaseEnd, res.newExpiry),
           })
-        )
+        ),
+        map(sanitizeDelta)
       );
     }
 
@@ -178,7 +204,10 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
       const e = ev as ReassignNameEvent;
       return forkJoin({
         processId: toObs((e as any).getReassignedProcessId?.()),
-      }).pipe(map(res => stripUndef({ processId: res.processId })));
+      }).pipe(
+        map(res => stripUndef({ processId: res.processId })),
+        map(sanitizeDelta)
+      );
     }
 
     case ExtendLeaseEvent.name: {
@@ -186,13 +215,17 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
       return forkJoin({
         leaseEnd:  toObs((e as any).getLeaseEnd?.()),
         newExpiry: toObs((e as any).getNewExpiry?.()),
-      }).pipe(map(res => stripUndef({ expiryTs: firstDefined(res.leaseEnd, res.newExpiry) })));
+      }).pipe(
+        map(res => stripUndef({ expiryTs: firstDefined(res.leaseEnd, res.newExpiry) })),
+        map(sanitizeDelta)
+      );
     }
 
     case IncreaseUndernameEvent.name: {
       const e = ev as IncreaseUndernameEvent;
       return forkJoin({ undernameLimit: toObs(e.getUndernameLimit?.()) }).pipe(
-        map(({ undernameLimit }) => ({ undernameLimit }))
+        map(stripUndef),
+        map(sanitizeDelta)
       );
     }
 
@@ -213,21 +246,23 @@ function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
             ),
           };
           return delta;
-        })
+        }),
+        map(sanitizeDelta)
       );
     }
 
     case UpgradeNameEvent.name: {
       const e = ev as UpgradeNameEvent;
-      const startTime = toObs(e.getStartTime?.());
+      const startTime        = toObs(e.getStartTime?.());
       const getPurchasePrice = toObs(e.getPurchasePrice?.());
-      const undernameLimit = toObs(e.getUndernameLimit?.());
+      const undernameLimit   = toObs(e.getUndernameLimit?.());
       return forkJoin({ startTime, getPurchasePrice, undernameLimit }).pipe(
         map(({ startTime, getPurchasePrice, undernameLimit }) => ({
           startTime,
-          getPurchasePrice,
+          purchasePrice: getPurchasePrice?.toString?.() ?? String(getPurchasePrice ?? ''),
           undernameLimit,
-        }))
+        })),
+        map(sanitizeDelta)
       );
     }
 
@@ -549,6 +584,40 @@ function buildExtraBox(e: TimelineEvent): ExtraBox | undefined {
   return fn?.(e);
 }
 
+// Helper: map class -> action/legend (kept in one place to avoid drift)
+function classToAction(cls: string): string {
+  switch (cls) {
+    case BuyNameEvent.name:           return 'Purchased ANT Name';
+    case ReassignNameEvent.name:      return 'ANT Process Change';
+    case ReturnedNameEvent.name:      return 'Returned ANT Name';
+    case ExtendLeaseEvent.name:       return 'Extended Lease';
+    case IncreaseUndernameEvent.name: return 'Increased Undername Limit';
+    case RecordEvent.name:            return 'RecordEvent';
+    case SetRecordEvent.name:         return 'Set Record Content';
+    case UpgradeNameEvent.name:       return 'Permanent ANT Purchase';
+    case StateNoticeEvent.name:       return 'State Notice';
+    case CreditNoticeEvent.name:      return 'Credit Notice';
+    case DebitNoticeEvent.name:       return 'Debit Notice';
+    default:                          return 'Unknown Event';
+  }
+}
+function classToLegend(cls: string): string {
+  switch (cls) {
+    case BuyNameEvent.name:           return 'ant-buy-event';
+    case ReassignNameEvent.name:      return 'ant-reassign-event';
+    case ReturnedNameEvent.name:      return 'ant-return-event';
+    case ExtendLeaseEvent.name:       return 'ant-extend-lease-event';
+    case IncreaseUndernameEvent.name: return 'undername-creation';
+    case RecordEvent.name:            return 'ant-content-change';
+    case SetRecordEvent.name:         return 'ant-content-change';
+    case UpgradeNameEvent.name:       return 'ant-upgrade-event';
+    case StateNoticeEvent.name:       return 'ant-state-change';
+    case CreditNoticeEvent.name:      return 'ant-credit-notice';
+    case DebitNoticeEvent.name:       return 'ant-debit-notice';
+    default:                          return 'multiple-changes';
+  }
+}
+
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
@@ -560,10 +629,8 @@ export default function History() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
-  // snapshots aligned 1:1 with events as they stream in
+  // snapshots aligned 1:1 with events as they are built globally
   const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
-  // map first occurrence of txHash -> event index
-  const firstIndexByTxHashRef = useRef<Record<string, number>>({});
 
   // selection state
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
@@ -574,18 +641,33 @@ export default function History() {
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
+  // near other state
+  const [holoFocusTx, setHoloFocusTx] = useState<string | null>(null);
+
+  // helper: pan/zoom to a card by tx without opening details
+  const focusByTxHash = (tx: string) => {
+    setHoloFocusTx(tx);
+    const node = cardRefs.current[tx];
+    if (node && transformRef.current) {
+      transformRef.current.zoomToElement(node, 300); // pans/zooms but does NOT setSelectedEvent
+    }
+  };
+
   // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // onClick toggles selection; now also attaches snapshot (if known)
+  // onClick toggles selection; attach snapshot by current index
   const onCardClick = (evt: TimelineEvent) => {
     if (selectedEvent?.txHash === evt.txHash) {
       setSelectedEvent(null);
       return;
     }
-    const idx = firstIndexByTxHashRef.current[evt.txHash];
-    const snap = Number.isInteger(idx) ? snapshots[idx] : undefined;
+    const idx = events.findIndex(e => e.txHash === evt.txHash);
+    const snap = idx >= 0 ? snapshots[idx] : undefined;
+    console.groupCollapsed(`[Select] ${evt.action} ${evt.txHash}`);
+    console.log('index', idx, 'snapshot', snap);
+    console.groupEnd();
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
@@ -602,86 +684,132 @@ export default function History() {
       .finally(() => setAntLoading(false));
   }, [arnsname, retryToken]);
 
+  // Chronological, deterministic rebuild on every emission + verbose logs
   useEffect(() => {
     setEvents([]);
     setSnapshots([]);
-    firstIndexByTxHashRef.current = {};
     setLoading(true);
     setError(null);
     setSelectedEvent(null);
 
-    // Running snapshot lives in the effect (sequentially updated)
-    let snap: AntSnapshot = initialSnapshot;
+    // Dedup across all emissions
+    type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
+    const byTx = new Map<string, Item>();
+    let ordCounter = 0;
+    let rebuildPass = 0;
 
     const service = ARIORewindService.autoConfiguration();
-    const sub = service
-      .getEventHistory$(arnsname)
-      .pipe(
-        catchError(err => {
-          setError(err?.message || 'Failed to load history');
-          return EMPTY;
-        }),
-        switchMap((raw: IARNSEvent[]) => from(raw)),
 
-        // Important: keep temporal order
-        concatMap((e: IARNSEvent) => {
-          // Resolve the small-card UI fields correctly (await getters)
-          const actor$     = toObs(e.getInitiator?.());
-          const timestamp$ = toObs(e.getEventTimeStamp?.());
-          const txHash$    = toObs(e.getEventMessageId?.());
+    let cancelled = false;
+    let sub: any = null;
 
-          let action = 'Unknown Event';
-          let legendKey = 'multiple-changes';
-          switch (e.constructor.name) {
-            case BuyNameEvent.name:           action = 'Purchased ANT Name';         legendKey = 'ant-buy-event';          break;
-            case ReassignNameEvent.name:      action = 'ANT Process Change';        legendKey = 'ant-reassign-event';     break;
-            case ReturnedNameEvent.name:      action = 'Returned ANT Name';          legendKey = 'ant-return-event';       break;
-            case ExtendLeaseEvent.name:       action = 'Extended Lease';             legendKey = 'ant-extend-lease-event'; break;
-            case IncreaseUndernameEvent.name: action = 'Increased Undername Limit';  legendKey = 'undername-creation';     break;
-            case RecordEvent.name:            action = 'RecordEvent';  legendKey = 'ant-content-change';     break;
-            case SetRecordEvent.name:         action = 'Set Record Content';                 legendKey = 'ant-content-change';     break;
-            case UpgradeNameEvent.name:       action = 'Permanent ANT Purchase';     legendKey = 'ant-upgrade-event';      break;
-            case StateNoticeEvent.name:       action = 'State Notice';               legendKey = 'ant-state-change';       break;
-            case CreditNoticeEvent.name:      action = 'Credit Notice';              legendKey = 'ant-credit-notice';      break;
-            case DebitNoticeEvent.name:       action = 'Debit Notice';               legendKey = 'ant-debit-notice';       break;
-          }
-          console.log(e); 
-          const delta$ = computeDelta$(e);
+    // StrictMode: delay subscription so first mount cleanup happens before sync emissions
+    const timer = setTimeout(() => {
+      if (cancelled) return;
 
-          return forkJoin({ actor: actor$, timestamp: timestamp$, txHash: txHash$, delta: delta$ }).pipe(
-            map(({ actor, timestamp, txHash, delta }) => {
-              snap = applyDelta(snap, delta); // sequentially apply Delta → Snapshot
-
-              return {
-                action,
-                actor: actor ?? '',
-                legendKey,
-                timestamp: timestamp ?? 0,
-                txHash: txHash ?? '',
-                rawEvent: e,
-                snapshot: snap, // snapshot as-of this event
-                extraBox: buildExtraBox({ action, actor: actor ?? '', legendKey, timestamp: timestamp ?? 0, txHash: txHash ?? '', rawEvent: e, snapshot: snap }),
-              } as TimelineEvent;
+      sub = service.getEventHistory$(arnsname)
+        .pipe(
+          catchError(err => {
+            setError(err?.message || 'Failed to load history');
+            return EMPTY;
+          })
+        )
+        .subscribe(async (raw: IARNSEvent[]) => {
+          // 1) Merge this batch into the dedup map
+          const batch = await Promise.all(
+            (raw || []).map(async (e, idx) => {
+              const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
+              const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
+              const ts    = Number.isFinite(tsNum) ? tsNum : 0; // seconds since epoch
+              const txRaw = await Promise.resolve(e.getEventMessageId?.());
+              const tx    = String(txRaw ?? `fallback:${ts}:${idx}`);
+              return { e, ts, tx };
             })
           );
-        })
-      )
-      .subscribe({
-        next: (uiEvt: TimelineEvent) => {
-          setEvents(prev => {
-            const idx = prev.length;
-            if (firstIndexByTxHashRef.current[uiEvt.txHash] === undefined) {
-              firstIndexByTxHashRef.current[uiEvt.txHash] = idx;
+          for (const { e, ts, tx } of batch) {
+            if (!byTx.has(tx)) {
+              byTx.set(tx, { e, ts, tx, ord: ordCounter++ });
+            } else {
+              // keep earliest ts if previous was 0, update event reference
+              const cur = byTx.get(tx)!;
+              if (cur.ts === 0 && ts > 0) cur.ts = ts;
+              cur.e = e;
             }
-            return [...prev, uiEvt];
-          });
-          setSnapshots(prev => [...prev, uiEvt.snapshot!]);
-        },
-        complete: () => setLoading(false),
-        error: () => setLoading(false),
-      });
+          }
 
-    return () => sub.unsubscribe();
+          // 2) Build a globally sorted array
+          const all = Array.from(byTx.values());
+          all.sort((a, b) => {
+            const at = a.ts || 0, bt = b.ts || 0;
+            if (at !== bt) return at - bt;
+            return a.ord - b.ord; // stable tie-breaker
+          });
+
+          // 3) Rebuild snapshots sequentially in chrono order with verbose logs
+          let snap = initialSnapshot;
+          const ui: TimelineEvent[] = [];
+          const snaps: AntSnapshot[] = [];
+
+          for (const { e, ts, tx } of all) {
+            const [actor, delta] = await Promise.all([
+              Promise.resolve(e.getInitiator?.()),
+              firstValueFrom(computeDelta$(e)),
+            ]);
+
+            const before = snap;
+            const after  = applyDelta(snap, delta);
+
+            const iso = ts ? new Date(ts * 1000).toISOString() : 'n/a';
+            const cls = e.constructor?.name ?? 'Unknown';
+            console.groupCollapsed(`🧭 [History] ${cls} ${tx} @ ${iso}`);
+            console.log('delta', delta);
+            console.log('before', before);
+            console.log('after', after);
+            console.groupEnd();
+
+            snap = after;
+
+            const action    = classToAction(cls);
+            const legendKey = classToLegend(cls);
+
+            const uiEvt: TimelineEvent = {
+              action,
+              actor: actor ?? '',
+              legendKey,
+              timestamp: ts ?? 0,
+              txHash: tx,
+              rawEvent: e,
+              snapshot: snap,
+            };
+            uiEvt.extraBox = buildExtraBox(uiEvt);
+
+            ui.push(uiEvt);
+            snaps.push(snap);
+          }
+
+          // 4) Commit atomically with rebuild summary
+          rebuildPass += 1;
+          const firstTs = all[0]?.ts ?? 0;
+          const lastTs  = all[all.length - 1]?.ts ?? 0;
+          console.log(
+            `[⏱ REBUILD #${rebuildPass}] uniques=${all.length}, ` +
+            `range=${firstTs ? new Date(firstTs * 1000).toISOString() : 'n/a'} → ` +
+            `${lastTs ? new Date(lastTs * 1000).toISOString() : 'n/a'}`
+          );
+
+          if (!cancelled) {
+            setEvents(ui);
+            setSnapshots(snaps);
+            setLoading(false);
+          }
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (sub) sub.unsubscribe();
+    };
   }, [arnsname, retryToken]);
 
   // After selection paints, pan/zoom to it
@@ -760,6 +888,14 @@ export default function History() {
     ? baseEvents
     : baseEvents.filter(e => activeLegend.has(e.legendKey));
 
+  // Right after visibleEvents is computed:
+  const holoEvents = visibleEvents
+    .slice() // don't mutate
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .filter(st => !excludedActions.includes(st.action))
+    .map(e => ({ txHash: e.txHash, timestamp: e.timestamp, legendKey: e.legendKey }));
+
+
   // Build the timeline cards & make them clickable
   const timelineEvents = visibleEvents
     .sort((a, b) => a.timestamp - b.timestamp)
@@ -828,7 +964,7 @@ export default function History() {
             { key: 'ant-reassign-event',      label: 'ANT Process Change' },
             { key: 'ant-upgrade-event',       label: 'ANT Upgrade' },
             { key: 'ant-content-change',      label: 'Content Change' },
-            { key: 'undername-creation',      label: 'Undername Increase' },
+            { key: 'undername-creation',      label: 'Increased Undername Limit' },
             { key: 'ant-controller-addition', label: 'Controller Addition' },
             { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
           ].map(({ key, label }) => (
@@ -852,7 +988,6 @@ export default function History() {
         </div>
       </div>
 
-
       {/* Fixed ANT Bar */}
       {antDetail  && (
         <CurrentAntBar
@@ -870,7 +1005,7 @@ export default function History() {
           targetId={antDetail.targetId}
           undernameLimit={antDetail.undernameLimit}
           expiryDate={antDetail.expiryDate}
-          onBack={() => navigate(-2)}
+          onBack={() => navigate('/')}
         />
       )}
 
@@ -879,7 +1014,7 @@ export default function History() {
         <TransformWrapper
           ref={transformRef}
           initialScale={1}
-          minScale={0.5}
+          minScale={0.02}
           maxScale={2}
           wheel={{ step: 50 }}
           doubleClick={{ disabled: true }}
@@ -928,6 +1063,18 @@ export default function History() {
           <EventDetails uiEvent={selectedEvent} />
         </div>
       )}
+
+      {/* Holo nav bar: navigate-only; no detail open */}
+      <Holobar
+        events={baseEvents.map(e => ({
+          txHash: e.txHash,
+          timestamp: e.timestamp,         // seconds
+          legendKey: e.legendKey,         // if you set one
+        }))}
+        selectedTxHash={holoFocusTx}       // highlight tick on the bar
+        onSelectEventId={focusByTxHash}    // navigate only; no setSelectedEvent here
+      />
+
     </div>
   );
 }
