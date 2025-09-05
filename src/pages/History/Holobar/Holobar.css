@@ -1,0 +1,124 @@
+/* src/features/holobar/Holobar.css */
+/* ── holobar global sizing ─────────────────────────── */
+:root {
+    /* change this to scale everything (ticks, labels, padding) */
+    --holobar-scale: 0.70;  /* e.g. 0.85, 1, 1.25 */
+  }
+  
+  /* scale the entire bar; keeps it anchored to the bottom */
+  .holo-track {
+    transform: scale(var(--holobar-scale));
+    transform-origin: bottom center;
+    will-change: transform;
+  }
+  
+  /* optional utilities so you can tweak via a class */
+  .holo-size-70  { --holobar-scale: 0.70; }
+  .holo-size-80  { --holobar-scale: 0.80; }
+  .holo-size-90  { --holobar-scale: 0.90; }
+  .holo-size-100 { --holobar-scale: 1; }
+  .holo-size-110 { --holobar-scale: 1.10; }
+  .holo-size-125 { --holobar-scale: 1.25; }
+  .holo-size-150 { --holobar-scale: 1.50; }
+  
+.holo-tick {
+    position: absolute;    
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 0;
+    border: none;
+    outline: none;
+    cursor: pointer;
+  
+    background: currentColor;
+    color: rgba(255, 255, 255, 0.65); /* fallback */
+    opacity: 0.7;
+  
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease,
+      box-shadow 120ms ease;
+    box-shadow:
+      0 0 0 0 rgba(255,255,255,0),
+      0 1px 0 rgba(0,0,0,0.20);
+  }
+  
+  .holo-tick:hover { opacity: 0.9; }
+  .holo-tick.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow:
+      0 0 0 2px rgba(255,255,255,0.10),
+      0 1px 0 rgba(0,0,0,0.25);
+  }
+  
+  /* Match legend keys exactly */
+  .holo-tick.ant-reassign-event      { color: #ff004c; }
+  .holo-tick.ant-content-change      { color: #1E90FF; }
+  .holo-tick.undername-creation      { color: #00CED1; }
+  .holo-tick.ant-controller-addition { color: #C71585; }
+  .holo-tick.ant-buy-event           { color: #FFA500; }
+  .holo-tick.ant-state-change        { color: #896dd4; }
+  .holo-tick.ant-upgrade-event       { color: #98dda4; }
+  .holo-tick.ant-extend-lease-event  { color: #ffd000; }
+  
+
+  /* --- Selected cursor (vertical line + date chip) --- */
+.holo-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-50%);
+    pointer-events: none; /* purely visual */
+  }
+  
+  .holo-cursor-line {
+    position: absolute;
+    top: -5rem;            /* rise slightly above the bar */
+    bottom: 0;            /* down through the bar */
+    width: 1px;
+    background: var(--holo-cursor-color, rgba(255, 255, 255, 0.6));
+  }
+  
+  .holo-cursor-chip {
+    position: absolute;
+    top: -6rem;           /* float above the bar */
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    font-size: 18px;
+    line-height: 1.2;
+    white-space: nowrap;
+  
+    color: var(--holo-chip-fg, #cbd5e1);
+    background: var(--holo-chip-bg, rgba(8, 10, 16, 0.65));
+    border: 1px solid var(--holo-chip-border, rgba(148, 163, 184, 0.2));
+    border-radius: 6px;
+  
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  /* If your bar is very short, you can nudge the chip closer: */
+  /* .holo-cursor-chip { top: -22px; } */
+  
+  /* Ensure ticks are absolutely positioned in the same stacking context */
+.holo-inner { position: absolute; inset: 0; } /* you likely already have this */
+.holo-tick   { position: absolute; z-index: 2; }
+
+/* Selected tick should always be on top */
+.holo-tick.active { z-index: 999; }
+
+/* ↓ Demote the most common type so others render above it
+   Change `.ant-content-change` to whatever your "too common" type is */
+.holo-tick.ant-content-change { z-index: 1; }
+
+/* ↑ Give the rarer types a higher stacking order */
+.holo-tick.ant-reassign-event,
+.holo-tick.undername-creation,
+.holo-tick.ant-buy-event,
+.holo-tick.ant-state-change,
+.holo-tick.ant-upgrade-event,
+.holo-tick.ant-extend-lease-event {
+  z-index: 3;
+}
