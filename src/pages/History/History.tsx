@@ -6,7 +6,6 @@ import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import Holobar from './Holobar/Holobar';
-import { HOLOBAR_MINIMAL } from './Holobar/holobarConfig';
 
 import {
   ARIORewindService,
@@ -641,24 +640,27 @@ export default function History() {
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<string | null>(null);
 
-  // near other state
+  // holobar cursor focus (kept in sync with both card clicks and holobar scrubs)
   const [holoFocusTx, setHoloFocusTx] = useState<string | null>(null);
+
+  // Refs for pan/zoom and each card
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
   // helper: pan/zoom to a card by tx without opening details
   const focusByTxHash = (tx: string) => {
     setHoloFocusTx(tx);
     const node = cardRefs.current[tx];
     if (node && transformRef.current) {
-      transformRef.current.zoomToElement(node, 300); // pans/zooms but does NOT setSelectedEvent
+      transformRef.current.zoomToElement(node, 300); // navigate only
     }
   };
 
-  // Refs for pan/zoom and each card
-  const transformRef = useRef<ReactZoomPanPinchRef>(null);
-  const cardRefs     = useRef<Record<string, HTMLDivElement | null>>({});
-
   // onClick toggles selection; attach snapshot by current index
   const onCardClick = (evt: TimelineEvent) => {
+    // keep holobar cursor in sync with card clicks
+    setHoloFocusTx(evt.txHash);
+
     if (selectedEvent?.txHash === evt.txHash) {
       setSelectedEvent(null);
       return;
@@ -670,6 +672,13 @@ export default function History() {
     console.groupEnd();
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
+
+  // If selection changes elsewhere, keep holobar cursor synced
+  useEffect(() => {
+    if (selectedEvent?.txHash) {
+      setHoloFocusTx(selectedEvent.txHash);
+    }
+  }, [selectedEvent?.txHash]);
 
   // fetch ANT detail
   useEffect(() => {
@@ -877,7 +886,7 @@ export default function History() {
     'Credit Notice',
     'Debit Notice',
     'Returned ANT Name',
-    'RecordEvent',
+    //'RecordEvent',
     'State Notice',
     'Unknown Event'
   ];
@@ -887,14 +896,6 @@ export default function History() {
   const visibleEvents = activeLegend.size === 0
     ? baseEvents
     : baseEvents.filter(e => activeLegend.has(e.legendKey));
-
-  // Right after visibleEvents is computed:
-  const holoEvents = visibleEvents
-    .slice() // don't mutate
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .filter(st => !excludedActions.includes(st.action))
-    .map(e => ({ txHash: e.txHash, timestamp: e.timestamp, legendKey: e.legendKey }));
-
 
   // Build the timeline cards & make them clickable
   const timelineEvents = visibleEvents
