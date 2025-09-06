@@ -886,7 +886,7 @@ export default function History() {
     'Credit Notice',
     'Debit Notice',
     'Returned ANT Name',
-    //'RecordEvent',
+    'RecordEvent',
     'State Notice',
     'Unknown Event'
   ];
