@@ -6,6 +6,7 @@ import { AiOutlineArrowLeft } from 'react-icons/ai';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import Holobar from './Holobar/Holobar';
+import Legend from './Legend';
 
 import {
   ARIORewindService,
@@ -22,8 +23,9 @@ import {
   StateNoticeEvent,
   SetRecordEvent,
   CreditNoticeEvent,
-  DebitNoticeEvent,
+  DebitNoticeEvent
 } from 'ao-js-sdk';
+
 import { from, forkJoin, of, Observable, EMPTY, firstValueFrom } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import './History.css';
@@ -100,16 +102,16 @@ function uniq(arr: string[] = []) { return Array.from(new Set(arr)); }
 function sanitizeDelta<T extends Record<string, any>>(delta: T): Partial<T> {
   const out: any = {};
   for (const [k, v] of Object.entries(delta)) {
-    if (v === undefined || v === null) continue;             // prevent wiping with undefined/null
+    if (v === undefined || v === null) continue;
     if (
       (k === 'owner' || k === 'processId' || k === 'targetId' ||
        k === 'description' || k === 'ticker' || k === 'purchasePrice' ||
        k === 'subDomain') && v === ''
-    ) continue;                                              // omit empty strings for identity-ish fields
+    ) continue;
     if (
       (k === 'expiryTs' || k === 'ttlSeconds' || k === 'undernameLimit' || k === 'startTime') &&
       (v === 0 || v === '0')
-    ) continue;                                              // omit zero-ish sentinels
+    ) continue;
     out[k] = v;
   }
   return out;
@@ -281,10 +283,10 @@ export interface TimelineEvent {
   action:     string;
   actor:      string;
   legendKey:  string;
-  timestamp:  number;
+  timestamp:  number;   // seconds
   txHash:     string;
   extraBox?: ExtraBox;
-  rawEvent:   IARNSEvent;
+  rawEvent:   IARNSEvent;  // for EventDetails; initial-state card is non-clickable
   snapshot?:  AntSnapshot;
 }
 
@@ -472,6 +474,61 @@ function ellip(str?: string, keep = 5) {
   return `${str.slice(0, keep)}…${str.slice(-keep)}`;
 }
 
+/** helper: normalize numbers that might come in seconds or milliseconds to seconds */
+function toEpochSeconds(ts: any): number {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n >= 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+}
+
+/** helper: scale decimal-like price into atomic integer if it's tiny (e.g. 0.000000000845310383 → 845310383) */
+function normalizePurchasePrice(raw: any): string | undefined {
+  if (raw == null) return undefined;
+  // prefer explicit fields if present
+  const maybeAtomic =
+    (typeof raw === 'object' && raw !== null && (
+      (raw.atomic ?? raw.winston ?? raw.value ?? raw.amount)
+    )) as any;
+
+  let s = '';
+  if (maybeAtomic !== undefined) {
+    s = String(maybeAtomic).trim();
+  } else if (typeof raw === 'string' || typeof raw === 'number') {
+    s = String(raw).trim();
+  } else if (typeof (raw as any)?.toString === 'function') {
+    s = String((raw as any).toString()).trim();
+  }
+
+  if (!s) return undefined;
+
+  // if it's a pure integer string
+  if (/^\d+$/.test(s)) {
+    return s === '0' ? undefined : s;
+  }
+
+  // if it's a small decimal (0 < x < 1), try scaling by 1e18 to get atomic units
+  const f = Number(s);
+  if (Number.isFinite(f) && f > 0 && f < 1) {
+    const scaled = Math.round(f * 1e18);
+    return scaled > 0 ? String(scaled) : undefined;
+  }
+
+  // last resort: strip non-digits
+  const digits = s.replace(/[^\d]/g, '');
+  return digits && digits !== '0' ? digits : undefined;
+}
+
+/** helper: Title-case known type strings (e.g., 'lease' → 'Lease') */
+function titleizeType(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const t = String(raw).trim();
+  if (!t) return undefined;
+  // simple Title Case of first word; special-case 'lease'
+  const lower = t.toLowerCase();
+  if (lower === 'lease') return 'Lease';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefined> = {
   'Purchased ANT Name': (e) => ({
     tag: 'LEASE',
@@ -487,6 +544,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
         </a>
         ) : '—',
       },
+      { label: 'Purchase Price', value: (e.snapshot?.purchasePrice) ?? '—' },
       { label: 'Process', value: ellip(e.snapshot?.processId) == '—' ? 'Not Yet Known' : ellip(e.snapshot?.processId) },
     ],
   }),
@@ -552,12 +610,12 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     };
   },
 
-  'Permanent ANT Purchase': (e) => ({
-    tag: 'UPGRADE',
-    items: [
-      { label: 'Purchase Price', value: e.snapshot?.purchasePrice ?? '—' },
-    ],
-  }),
+  // 'Permanent ANT Purchase': (e) => ({
+  //   tag: 'UPGRADE',
+  //   items: [
+  //     { label: 'Purchase Price', value: normalizePurchasePrice(e.snapshot?.purchasePrice) },
+  //   ],
+  // }),
 
   'Updated Mainpage Contents': (e) => {
     const tx = e.snapshot?.contentHashes?.['@'];
@@ -568,11 +626,45 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
       ],
     };
   },
+
+  // Initial Mainnet State (conditional fields only)
+  'Initial Mainnet State': (e) => {
+    const items: ExtraItem[] = [];
+    const desc = titleizeType(e.snapshot?.description);
+    const start = e.snapshot?.startTime ?? 0;
+    const end   = e.snapshot?.expiryTs ?? 0;
+    const limit = e.snapshot?.undernameLimit ?? 0;
+    const pid   = e.snapshot?.processId;
+    const price = e.snapshot?.purchasePrice;
+
+    if (desc) items.push({ label: 'Type', value: desc });
+    if (start && start !== 0) items.push({ label: 'Start', value: fmtDate(start) });
+    if (end && end !== 0) items.push({ label: 'End', value: fmtDate(end) });
+    if (limit && Number(limit) !== 0) items.push({ label: 'Undername Limit', value: String(limit) });
+    if (pid) {
+      items.push({
+        label: 'Process',
+        value: (
+          <a
+            href={`https://www.ao.link/#/entity/${pid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {shortTx(pid)}
+          </a>
+        )
+      });
+    }
+    if (price && price !== '0') items.push({ label: 'Purchase Price', value: price });
+
+    return { tag: 'INITIAL', items };
+  },
+
   // Fallback for anything unhandled:
   'default': (e) => ({
     tag: 'INFO',
     items: [
-      { label: 'Tx',   value: ellip(e.txHash) },
+      { label: 'Tx', value: <TxidLink txid={e.txHash} /> },
       { label: 'When', value: fmtDate((e.timestamp ?? 0) * 1000) },
     ],
   }),
@@ -642,6 +734,23 @@ export default function History() {
 
   // holobar cursor focus (kept in sync with both card clicks and holobar scrubs)
   const [holoFocusTx, setHoloFocusTx] = useState<string | null>(null);
+
+  // NEW: cache initial mainnet state once (normalize name to avoid misses)
+  const [initialMainnetState, setInitialMainnetState] = useState<any | null>(null);
+  useEffect(() => {
+    try {
+      const service = ARIORewindService.autoConfiguration();
+      const canonical = arnsname.trim().toLowerCase();
+      const ims = service.getMainnetInitialState
+        ? service.getMainnetInitialState(canonical)
+        : undefined;
+      setInitialMainnetState(ims ?? null);
+      console.log('[History] Initial Mainnet State:', ims ?? 'none');
+    } catch (e) {
+      console.warn('[History] getMainnetInitialState failed:', e);
+      setInitialMainnetState(null);
+    }
+  }, [arnsname]);
 
   // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -729,7 +838,7 @@ export default function History() {
             (raw || []).map(async (e, idx) => {
               const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
               const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
-              const ts    = Number.isFinite(tsNum) ? tsNum : 0; // seconds since epoch
+              const ts    = Number.isFinite(tsNum) ? tsNum : 0; // seconds since epoch (API returns secs here)
               const txRaw = await Promise.resolve(e.getEventMessageId?.());
               const tx    = String(txRaw ?? `fallback:${ts}:${idx}`);
               return { e, ts, tx };
@@ -796,12 +905,67 @@ export default function History() {
             snaps.push(snap);
           }
 
+          // 3.5) Inject Initial Mainnet State (if present) as the first card
+          try {
+            const ims = initialMainnetState; // use cached & normalized value
+            if (ims) {
+              const [
+                processId,
+                purchasePriceCA,
+                type,
+                startTime,
+                endTime,
+                undernameLimit
+              ] = await Promise.all([
+                Promise.resolve(ims.getProcessId?.()),
+                Promise.resolve(ims.getPurchasePrice?.()),
+                Promise.resolve(ims.getType?.()),
+                Promise.resolve(ims.getStartTime?.()),
+                Promise.resolve(ims.getEndTime?.()),
+                Promise.resolve(ims.getUndernameLimit?.()),
+              ]);
+
+              const normalizedPrice = normalizePurchasePrice(purchasePriceCA); // ← robust
+              const initialSnap: AntSnapshot = {
+                ...initialSnapshot,
+                processId: processId ?? '',
+                purchasePrice: normalizedPrice,                       // may be undefined if zero/absent
+                startTime: toEpochSeconds(startTime) * 1000,          // ms for display
+                expiryTs:  toEpochSeconds(endTime)   * 1000,          // ms for display
+                undernameLimit,
+                description: titleizeType(type) ?? undefined,         // 'Lease' etc.
+              };
+
+              // Normalize the event timestamp to **seconds** so holobar math stays sane
+              const tsCandidate = ims.getEventTimeStamp?.();
+              const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
+
+              const initEvt: TimelineEvent = {
+                action: 'Initial Mainnet State',
+                actor: '',
+                legendKey: 'initial-mainnet-state',
+                timestamp: tsSec,                    // SECONDS
+                txHash: `initial:${arnsname}`,
+                rawEvent: {} as IARNSEvent,          // non-clickable
+                snapshot: initialSnap,
+              };
+              initEvt.extraBox = buildExtraBox(initEvt);
+
+              ui.unshift(initEvt);
+              snaps.unshift(initialSnap);
+            } else {
+              console.log('[History] No Initial Mainnet State found for', arnsname);
+            }
+          } catch (e) {
+            console.warn('[InitialMainnetState] failed to attach:', e);
+          }
+
           // 4) Commit atomically with rebuild summary
           rebuildPass += 1;
-          const firstTs = all[0]?.ts ?? 0;
-          const lastTs  = all[all.length - 1]?.ts ?? 0;
+          const firstTs = ui.length ? ui[0].timestamp : 0;
+          const lastTs  = ui.length ? ui[ui.length - 1].timestamp : 0;
           console.log(
-            `[⏱ REBUILD #${rebuildPass}] uniques=${all.length}, ` +
+            `[⏱ REBUILD #${rebuildPass}] uniques=${ui.length}, ` +
             `range=${firstTs ? new Date(firstTs * 1000).toISOString() : 'n/a'} → ` +
             `${lastTs ? new Date(lastTs * 1000).toISOString() : 'n/a'}`
           );
@@ -819,7 +983,7 @@ export default function History() {
       clearTimeout(timer);
       if (sub) sub.unsubscribe();
     };
-  }, [arnsname, retryToken]);
+  }, [arnsname, retryToken, initialMainnetState]);
 
   // After selection paints, pan/zoom to it
   useLayoutEffect(() => {
@@ -899,21 +1063,28 @@ export default function History() {
 
   // Build the timeline cards & make them clickable
   const timelineEvents = visibleEvents
-    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice()
+    .sort((a, b) => {
+      const aInit = a.legendKey === 'initial-mainnet-state' ? 1 : 0;
+      const bInit = b.legendKey === 'initial-mainnet-state' ? 1 : 0;
+      if (aInit !== bInit) return bInit - aInit; // put initial first
+      return a.timestamp - b.timestamp;
+    })
     .filter(st => !excludedActions.includes(st.action))
     .map((st, i) => {
       const isSelected = selectedEvent?.txHash === st.txHash;
+      const isInitial  = st.legendKey === 'initial-mainnet-state';
       return {
         key: `${st.txHash}-${i}`,
         content: (
           <div
-            className={`chain-card clickable${isSelected ? ' selected' : ''}`}
+            className={`chain-card${!isInitial ? ' clickable' : ''}${isSelected ? ' selected' : ''}`}
             ref={el => { cardRefs.current[st.txHash] = el; }}
-            onClick={() => onCardClick(st)}
+            onClick={!isInitial ? () => onCardClick(st) : undefined}
           >
             <div className="chain-card-header">
               <span className="action-text">{st.action}</span>
-              <span className="actor">Actor: {st.actor.slice(0,5)}</span>
+              {!isInitial && <span className="actor">Actor: {st.actor.slice(0,5)}</span>}
               <span className={`legend-square ${st.legendKey}`}></span>
             </div>
             <hr />
@@ -923,15 +1094,17 @@ export default function History() {
                   year: 'numeric', month: 'short', day: 'numeric'
                 })}
               </span>
-              <span className="txid">
-                <a
-                  href={`https://www.ao.link/#/message/${st.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {st.txHash}
-                </a>
-              </span>
+              {!isInitial && (
+                <span className="txid">
+                  <a
+                    href={`https://www.ao.link/#/message/${st.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {st.txHash}
+                  </a>
+                </span>
+              )}
             </div>
 
             {st.extraBox && (
@@ -956,38 +1129,11 @@ export default function History() {
   return (
     <div className="history">
       {/* Legend */}
-      <div className="legend">
-        <h4>Legend</h4>
-        <div className="legend-section">
-          <div className="legend-title">Event Legend:</div>
-          {[
-            { key: 'ant-buy-event',           label: 'ANT Purchase' },
-            { key: 'ant-reassign-event',      label: 'ANT Process Change' },
-            { key: 'ant-upgrade-event',       label: 'ANT Upgrade' },
-            { key: 'ant-content-change',      label: 'Content Change' },
-            { key: 'undername-creation',      label: 'Increased Undername Limit' },
-            { key: 'ant-controller-addition', label: 'Controller Addition' },
-            { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              className={`legend-item-btn ${activeLegend.has(key) ? 'active' : ''}`}
-              onClick={() => toggleLegend(key)}
-              aria-pressed={activeLegend.has(key)}
-            >
-              <span className={`legend-swatch ${key}`} />
-              <span className="legend-label">{label}</span>
-            </button>
-          ))}
-
-          <div className="legend-actions">
-            <button type="button" className="legend-reset" onClick={clearLegend}>
-              Show All
-            </button>
-          </div>
-        </div>
-      </div>
+      <Legend
+        activeLegend={activeLegend}
+        onToggle={toggleLegend}
+        onReset={clearLegend}
+      />
 
       {/* Fixed ANT Bar */}
       {antDetail  && (
@@ -1022,7 +1168,7 @@ export default function History() {
           limitToBounds={false}
           centerZoomedOut={false}
           centerOnInit={false}
-          initialPositionX={200}
+          initialPositionX={250}
           initialPositionY={125}
         >
           {({ zoomIn, zoomOut, resetTransform }) => (
@@ -1067,14 +1213,24 @@ export default function History() {
 
       {/* Holo nav bar: navigate-only; no detail open */}
       <Holobar
-        events={baseEvents.map(e => ({
-          txHash: e.txHash,
-          timestamp: e.timestamp,         // seconds
-          legendKey: e.legendKey,         // if you set one
-        }))}
-        selectedTxHash={holoFocusTx}       // highlight tick on the bar
-        onSelectEventId={focusByTxHash}    // navigate only; no setSelectedEvent here
+        events={visibleEvents
+          .slice()
+          .sort((a, b) => {
+            const ai = a.legendKey === 'initial-mainnet-state' ? 1 : 0;
+            const bi = b.legendKey === 'initial-mainnet-state' ? 1 : 0;
+            if (ai !== bi) return bi - ai;        // keep initial first
+            return a.timestamp - b.timestamp;
+          })
+          .filter(st => !excludedActions.includes(st.action))
+          .map(e => ({
+            txHash: e.txHash,
+            timestamp: e.timestamp,
+            legendKey: e.legendKey,
+          }))}
+        selectedTxHash={holoFocusTx}
+        onSelectEventId={focusByTxHash}
       />
+
 
     </div>
   );
