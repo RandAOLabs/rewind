@@ -610,12 +610,12 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     };
   },
 
-  // 'Permanent ANT Purchase': (e) => ({
-  //   tag: 'UPGRADE',
-  //   items: [
-  //     { label: 'Purchase Price', value: normalizePurchasePrice(e.snapshot?.purchasePrice) },
-  //   ],
-  // }),
+  'Permanent ANT Purchase': (e) => ({
+    tag: 'UPGRADE',
+    items: [
+      { label: 'Purchase Price', value: e.snapshot?.purchasePrice },
+    ],
+  }),
 
   'Updated Mainpage Contents': (e) => {
     const tx = e.snapshot?.contentHashes?.['@'];
