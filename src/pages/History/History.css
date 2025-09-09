@@ -1,5 +1,5 @@
 :root {
-  --header-height: 60px;
+  --header-height: 80px;
   --footer-height: 60px;
   --current-ant-height: 60px;
 
@@ -49,7 +49,7 @@
 /* zoom/pan controls */
 .chain-controls {
   position: fixed;
-  top: calc(var(--current-ant-height) + 0.76rem);
+  top: calc(var(--current-ant-height) + 2rem);
   right: 1rem;
   z-index: 1000000000000000020000;
 }
