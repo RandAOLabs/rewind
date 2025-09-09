@@ -73,7 +73,7 @@
   align-items: center;
 }
 .logo-img {
-  height: calc(var(--header-height));
+  height: 60px;
   width: auto;
   display: block;
 }
