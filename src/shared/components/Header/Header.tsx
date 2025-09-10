@@ -1,7 +1,7 @@
 // src/shared/components/Header/Header.tsx
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import logoLight from '../icons/ar.io-logo-square-light.png';
+import logoLight from '../icons/REWIND_WHITE_LOGO.png';
 import './Header.css';
 import { AiOutlineSearch } from 'react-icons/ai';
 

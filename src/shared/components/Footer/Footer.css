@@ -67,6 +67,7 @@
   color: var(--text-grey);
   transition: color 0.15s;
 }
+
 .footer-icon-button:hover {
   color: var(--text-white);
 }
@@ -76,4 +77,24 @@
   height: 20px;
   stroke: currentColor;
   fill: currentColor;
+}
+
+
+.footer-icon-logo {
+  width: 10rem;
+  margin-left: 0.75rem;
+  margin-bottom: 1rem;
+  height: auto;
+  cursor: pointer; /* makes it feel clickable */
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.footer-icon-logo:hover {
+  transform: scale(1.05); /* slight zoom */
+  opacity: 0.9;           /* subtle fade */
+}
+
+.footer-icon-logo:active {
+  transform: scale(0.95); /* pressed effect */
+  opacity: 0.8;
 }

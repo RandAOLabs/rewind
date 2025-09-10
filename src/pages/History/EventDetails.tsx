@@ -171,7 +171,7 @@ export default function EventDetails({ uiEvent }: { uiEvent: DetailEvent }) {
                   </ul>
                 </div>
               ) : (
-                <p className="muted">No undernames yet.</p>
+                <p className="muted">No undernames observed yet.</p>
               )}
             </div>
           </>

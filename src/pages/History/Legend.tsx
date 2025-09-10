@@ -14,6 +14,7 @@ const ITEMS: Array<{ key: string; label: string }> = [
   { key: 'undername-creation',      label: 'Increased Undername Limit' },
   { key: 'ant-controller-addition', label: 'Controller Addition' },
   { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
+  { key: 'ant-ownership-transfer',  label: 'Ownership Transfer' },
   // { key: 'initial-mainnet-state',   label: 'Initial State' },
 ];
 
