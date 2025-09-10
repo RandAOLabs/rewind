@@ -42,7 +42,7 @@
 /* push the chain down beneath it */
 .chain-wrapper {
   position: absolute;
-  inset: calc(var(--header-height) + var(--current-ant-height)) 0 var(--footer-height) 0;
+  inset: calc(var(--header-height) + var(--current-ant-height)) 0 0 0;
   overflow: hidden;
 }
 
