@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import { Tooltip } from 'antd';
-import BrandLogo from '../icons/ar.io-logo-square-light.png';
+import BrandLogo from '../icons/powered-by-ario-light.png';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { FaGithub, FaDiscord } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
-
-//import MarkdownModal from '@src/components/modals/MarkdownModal';
-//import { APP_VERSION, ARIO_DISCORD_LINK } from '../../../utils/constants';
-
 
 import './Footer.css';
 
@@ -21,16 +17,9 @@ export default function Footer() {
         <img
           src={BrandLogo}
           alt="ARIO Logo"
-          className="footer-icon"
+          className="footer-icon-logo"
+          onClick={() => window.open('https://ar.io', '_blank')}
         />
-        <Link
-          className="footer-link"
-          to="https://ar.io/legal/terms-of-service-and-privacy-policy"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Terms &amp; Conditions
-        </Link>
       </div>
 
       {/* SPACER */}
@@ -47,7 +36,7 @@ export default function Footer() {
             className="footer-button"
             onClick={() => setShowChangeLog(true)}
           >
-            {`${"APP_VERSION"}-${"0.8.22"}`}
+            {`${"APP_VERSION"}-${"0.0.0"}`}
           </button>
         </Tooltip>
 
@@ -57,15 +46,6 @@ export default function Footer() {
             onClick={() => window.open('https://github.com/RandAOLabs/rewind', '_blank')}
           >
             <FaGithub className="footer-icon" />
-          </button>
-        </Tooltip>
-
-        <Tooltip title="Discord" placement="top" color="var(--text-faded)">
-          <button
-            className="footer-icon-button"
-            onClick={() => window.open("https://discord.gg/JVM24Evz", '_blank')}
-          >
-            <FaDiscord className="footer-icon" />
           </button>
         </Tooltip>
 

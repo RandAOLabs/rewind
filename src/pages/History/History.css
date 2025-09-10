@@ -253,6 +253,7 @@
 .legend-square.ant-state-change,        .legend-swatch.ant-state-change        { background: #896dd4; }
 .legend-square.ant-upgrade-event,       .legend-swatch.ant-upgrade-event       { background: #98dda4; }
 .legend-square.ant-extend-lease-event,  .legend-swatch.ant-extend-lease-event  { background: #ffd000; }
+.legend-square.ant-ownership-transfer,  .legend-swatch.ant-ownership-transfer  { background: #00ff00; }
 /* monospace helper */
 .controller { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
 
