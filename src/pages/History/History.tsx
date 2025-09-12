@@ -13,7 +13,7 @@ import {
   ARNameDetail,
 } from 'ao-js-sdk';
 
-import { EMPTY, firstValueFrom } from 'rxjs';
+import { EMPTY, firstValueFrom, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
@@ -25,7 +25,7 @@ import { classToAction, classToLegend } from './data/eventMappings';
 
 // Extracted types, data helpers, and computeDelta$
 import { AntSnapshot, TimelineEvent, initialSnapshot } from './types';
-import { applyDelta, normalizePurchasePrice, toEpochSeconds, firstDefined } from './utils/data';
+import { applyDelta, toEpochSeconds, firstDefined } from './utils/data';
 import { buildExtraBox } from './data/extraBoxBuilders';
 import { computeDelta$ } from './data/computeDelta';
 
@@ -58,11 +58,12 @@ export default function History() {
   // NEW: cache initial mainnet state once (normalize name to avoid misses)
   const [initialMainnetState, setInitialMainnetState] = useState<any | null>(null);
   useEffect(() => {
-    try {
-      const service = ARIORewindService.autoConfiguration();
-      const canonical = arnsname.trim().toLowerCase();
-      const ims = service.getMainnetInitialState
-        ? service.getMainnetInitialState(canonical)
+    (async () => {
+      try {
+        const service = await ARIORewindService.autoConfiguration();
+        const canonical = arnsname.trim().toLowerCase();
+        const ims = service.getMainnetInitialState
+          ? service.getMainnetInitialState(canonical)
         : undefined;
       setInitialMainnetState(ims ?? null);
       console.log('[History] Initial Mainnet State:', ims ?? 'none');
@@ -70,7 +71,7 @@ export default function History() {
       console.warn('[History] getMainnetInitialState failed:', e);
       setInitialMainnetState(null);
     }
-  }, [arnsname]);
+  })(), [arnsname]});
 
   // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -94,9 +95,9 @@ export default function History() {
     }
     const idx = events.findIndex(e => e.txHash === evt.txHash);
     const snap = idx >= 0 ? snapshots[idx] : undefined;
-    console.groupCollapsed(`[Select] ${evt.action} ${evt.txHash}`);
-    console.log('index', idx, 'snapshot', snap);
-    console.groupEnd();
+    // console.groupCollapsed(`[Select] ${evt.action} ${evt.txHash}`);
+    // console.log('index', idx, 'snapshot', snap);
+    // console.groupEnd();
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
@@ -107,188 +108,209 @@ export default function History() {
 
   // fetch ANT detail
   useEffect(() => {
-    setAntLoading(true);
-    setAntError(null);
+    (async () => {
+      setAntLoading(true);
+      setAntError(null);
 
-    const service = ARIORewindService.autoConfiguration();
-    service
-      .getAntDetail(arnsname)
+      const service = await ARIORewindService.autoConfiguration();
+      service
+        .getAntDetail(arnsname)
       .then(detail => setAntDetail(detail))
       .catch(err => setAntError(err.message || 'Failed to load ANT details'))
       .finally(() => setAntLoading(false));
+    })();
   }, [arnsname, retryToken]);
 
   // Chronological, deterministic rebuild
   useEffect(() => {
-    setEvents([]);
-    setSnapshots([]);
-    setLoading(true);
-    setError(null);
-    setSelectedEvent(null);
-
-    type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
-    const byTx = new Map<string, Item>();
-    let ordCounter = 0;
-    let rebuildPass = 0;
-
-    const service = ARIORewindService.autoConfiguration();
-
     let cancelled = false;
-    let sub: any = null;
-
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-
-      sub = service.getEventHistory$(arnsname)
-        .pipe(
-          catchError(err => {
-            setError(err?.message || 'Failed to load history');
-            return EMPTY;
-          })
-        )
-        .subscribe(async (raw: IARNSEvent[]) => {
-          const batch = await Promise.all(
-            (raw || []).map(async (e, idx) => {
-              const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
-              const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
-              const ts    = Number.isFinite(tsNum) ? tsNum : 0;
-              const txRaw = await Promise.resolve(e.getEventMessageId?.());
-              const tx    = String(txRaw ?? `fallback:${ts}:${idx}`);
-              return { e, ts, tx };
+    let sub: Subscription | null = null;
+  
+    (async () => {
+      try {
+        // reset UI state
+        setEvents([]);
+        setSnapshots([]);
+        setLoading(true);
+        setError(null);
+        setSelectedEvent(null);
+  
+        type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
+        const byTx = new Map<string, Item>();
+        let ordCounter = 0;
+        let rebuildPass = 0;
+  
+        const service = await ARIORewindService.autoConfiguration();
+        if (cancelled) return;
+  
+        sub = service
+          .getEventHistory$(arnsname)
+          .pipe(
+            catchError((err: unknown) => {
+              if (!cancelled) setError((err as any)?.message ?? 'Failed to load history');
+              return EMPTY;
             })
-          );
-          for (const { e, ts, tx } of batch) {
-            if (!byTx.has(tx)) {
-              byTx.set(tx, { e, ts, tx, ord: ordCounter++ });
-            } else {
-              const cur = byTx.get(tx)!;
-              if (cur.ts === 0 && ts > 0) cur.ts = ts;
-              cur.e = e;
-            }
-          }
-
-          const all = Array.from(byTx.values());
-          all.sort((a, b) => {
-            const at = a.ts || 0, bt = b.ts || 0;
-            if (at !== bt) return at - bt;
-            return a.ord - b.ord;
+          )
+          .subscribe({
+            next: async (raw: IARNSEvent[]) => {
+              // build batch with safe awaits
+              const batch = await Promise.all(
+                (raw ?? []).map(async (e, idx) => {
+                  const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
+                  const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
+                  const ts = Number.isFinite(tsNum) ? tsNum : 0;
+  
+                  const txRaw = await Promise.resolve(e.getEventMessageId?.());
+                  const tx = String(txRaw ?? `fallback:${ts}:${idx}`);
+  
+                  return { e, ts, tx };
+                })
+              );
+  
+              // dedupe/merge by tx
+              for (const { e, ts, tx } of batch) {
+                if (!byTx.has(tx)) {
+                  byTx.set(tx, { e, ts, tx, ord: ordCounter++ });
+                } else {
+                  const cur = byTx.get(tx)!;
+                  if (cur.ts === 0 && ts > 0) cur.ts = ts;
+                  cur.e = e;
+                }
+              }
+  
+              const all = Array.from(byTx.values()).sort((a, b) => {
+                const at = a.ts || 0, bt = b.ts || 0;
+                return at !== bt ? at - bt : a.ord - b.ord;
+              });
+  
+              let snap = initialSnapshot;
+              const ui: TimelineEvent[] = [];
+              const snaps: AntSnapshot[] = [];
+  
+              for (const { e, ts, tx } of all) {
+                const [actor, delta] = await Promise.all([
+                  Promise.resolve(e.getInitiator?.()),
+                  firstValueFrom(computeDelta$(e)),
+                ]);
+  
+                const before = snap;
+                const after = applyDelta(snap, delta);
+                void before; // keep if you log; otherwise silence TS
+  
+                snap = after;
+  
+                const cls = e.constructor?.name ?? 'Unknown';
+                const action = classToAction(cls);
+                const legendKey = classToLegend(cls);
+  
+                const uiEvt: TimelineEvent = {
+                  action,
+                  actor: actor ?? '',
+                  legendKey,
+                  timestamp: ts ?? 0,
+                  txHash: tx,
+                  rawEvent: e,
+                  snapshot: snap,
+                };
+                uiEvt.extraBox = buildExtraBox(uiEvt);
+  
+                ui.push(uiEvt);
+                snaps.push(snap);
+              }
+  
+              // Inject Initial Mainnet State (if present)
+              try {
+                const ims = initialMainnetState;
+                if (ims) {
+                  const [
+                    processId,
+                    purchasePriceCA,
+                    type,
+                    startTime,
+                    endTime,
+                    undernameLimit,
+                  ] = await Promise.all([
+                    Promise.resolve(ims.getProcessId?.()),
+                    Promise.resolve(ims.getPurchasePrice?.()),
+                    Promise.resolve(ims.getType?.()),
+                    Promise.resolve(ims.getStartTime?.()),
+                    Promise.resolve(ims.getEndTime?.()),
+                    Promise.resolve(ims.getUndernameLimit?.()),
+                  ]);
+  
+                  const microAmt = purchasePriceCA?.amount?.();
+                  const purchasePrice =
+                    typeof microAmt === 'bigint'
+                      ? (microAmt / 1_000_000n).toString()
+                      : undefined;
+  
+                  const toEpochSeconds = (v: any): number => {
+                    const n =
+                      typeof v === 'number'
+                        ? v
+                        : typeof v === 'bigint'
+                        ? Number(v)
+                        : Number(v ?? 0);
+                    return Number.isFinite(n) ? n : 0;
+                  };
+  
+                  const initialSnap: AntSnapshot = {
+                    ...initialSnapshot,
+                    processId: processId ?? '',
+                    purchasePrice,
+                    startTime: toEpochSeconds(startTime) * 1000,
+                    expiryTs: toEpochSeconds(endTime) * 1000,
+                    undernameLimit,
+                    description: type ? String(type) : undefined,
+                  };
+  
+                  const tsCandidate = ims.getEventTimeStamp?.();
+                  const tsSec = toEpochSeconds(tsCandidate ?? startTime);
+  
+                  const initEvt: TimelineEvent = {
+                    action: 'Initial Mainnet State',
+                    actor: '',
+                    legendKey: 'initial-mainnet-state',
+                    timestamp: tsSec,
+                    txHash: `initial:${arnsname}`,
+                    rawEvent: {} as IARNSEvent,
+                    snapshot: initialSnap,
+                  };
+                  initEvt.extraBox = buildExtraBox(initEvt);
+  
+                  ui.unshift(initEvt);
+                  snaps.unshift(initialSnap);
+                }
+              } catch (e) {
+                console.warn('[InitialMainnetState] failed to attach:', e);
+              }
+  
+              rebuildPass += 1;
+              void rebuildPass; // silence TS if unused
+  
+              if (!cancelled) {
+                setEvents(ui);
+                setSnapshots(snaps);
+                setLoading(false);
+              }
+            },
+            error: (err: any) => {
+              if (!cancelled) {
+                setError(err?.message ?? 'Failed to load history');
+                setLoading(false);
+              }
+            },
           });
-
-          let snap = initialSnapshot;
-          const ui: TimelineEvent[] = [];
-          const snaps: AntSnapshot[] = [];
-
-          for (const { e, ts, tx } of all) {
-            const [actor, delta] = await Promise.all([
-              Promise.resolve(e.getInitiator?.()),
-              firstValueFrom(computeDelta$(e)),
-            ]);
-
-            const before = snap;
-            const after  = applyDelta(snap, delta);
-
-            const iso = ts ? new Date(ts * 1000).toISOString() : 'n/a';
-            const cls = e.constructor?.name ?? 'Unknown';
-            console.groupCollapsed(`🧭 [History] ${cls} ${tx} @ ${iso}`);
-            console.log('delta', delta);
-            console.log('before', before);
-            console.log('after', after);
-            console.groupEnd();
-
-            snap = after;
-
-            const action    = classToAction(cls);
-            const legendKey = classToLegend(cls);
-
-            const uiEvt: TimelineEvent = {
-              action,
-              actor: actor ?? '',
-              legendKey,
-              timestamp: ts ?? 0,
-              txHash: tx,
-              rawEvent: e,
-              snapshot: snap,
-            };
-            uiEvt.extraBox = buildExtraBox(uiEvt);
-
-            ui.push(uiEvt);
-            snaps.push(snap);
-          }
-
-          // Inject Initial Mainnet State (if present) as the first card
-          try {
-            const ims = initialMainnetState;
-            if (ims) {
-              const [
-                processId,
-                purchasePriceCA,
-                type,
-                startTime,
-                endTime,
-                undernameLimit
-              ] = await Promise.all([
-                Promise.resolve(ims.getProcessId?.()),
-                Promise.resolve(ims.getPurchasePrice?.()),
-                Promise.resolve(ims.getType?.()),
-                Promise.resolve(ims.getStartTime?.()),
-                Promise.resolve(ims.getEndTime?.()),
-                Promise.resolve(ims.getUndernameLimit?.()),
-              ]);
-
-              const normalizedPrice = normalizePurchasePrice(purchasePriceCA);
-              const initialSnap: AntSnapshot = {
-                ...initialSnapshot,
-                processId: processId ?? '',
-                purchasePrice: normalizedPrice,
-                startTime: toEpochSeconds(startTime) * 1000,
-                expiryTs:  toEpochSeconds(endTime)   * 1000,
-                undernameLimit,
-                description: type ? String(type) : undefined,
-              };
-
-              const tsCandidate = ims.getEventTimeStamp?.();
-              const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
-
-              const initEvt: TimelineEvent = {
-                action: 'Initial Mainnet State',
-                actor: '',
-                legendKey: 'initial-mainnet-state',
-                timestamp: tsSec,
-                txHash: `initial:${arnsname}`,
-                rawEvent: {} as IARNSEvent,
-                snapshot: initialSnap,
-              };
-              initEvt.extraBox = buildExtraBox(initEvt);
-
-              ui.unshift(initEvt);
-              snaps.unshift(initialSnap);
-            } else {
-              console.log('[History] No Initial Mainnet State found for', arnsname);
-            }
-          } catch (e) {
-            console.warn('[InitialMainnetState] failed to attach:', e);
-          }
-
-          rebuildPass += 1;
-          const firstTs = ui.length ? ui[0].timestamp : 0;
-          const lastTs  = ui.length ? ui[ui.length - 1].timestamp : 0;
-          console.log(
-            `[⏱ REBUILD #${rebuildPass}] uniques=${ui.length}, ` +
-            `range=${firstTs ? new Date(firstTs * 1000).toISOString() : 'n/a'} → ` +
-            `${lastTs ? new Date(lastTs * 1000).toISOString() : 'n/a'}`
-          );
-
-          if (!cancelled) {
-            setEvents(ui);
-            setSnapshots(snaps);
-            setLoading(false);
-          }
-        });
-    }, 0);
-
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.message ?? 'Failed to initialize history service');
+          setLoading(false);
+        }
+      }
+    })();
+  
     return () => {
       cancelled = true;
-      clearTimeout(timer);
       if (sub) sub.unsubscribe();
     };
   }, [arnsname, retryToken, initialMainnetState]);

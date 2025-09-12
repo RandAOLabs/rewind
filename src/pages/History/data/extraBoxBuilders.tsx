@@ -5,7 +5,9 @@ import { titleizeType } from '../utils/data';
 import type { TimelineEvent, ExtraItem, ExtraBox } from '../types';
 
 const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefined> = {
-  'Purchased ANT Name': (e) => ({
+  'Purchased ANT Name': (e) => {
+    const price = e.snapshot?.purchasePrice;
+    return {
     tag: 'LEASE',
     items: [
       { label: 'Expiry',  value: fmtDate(e.snapshot?.expiryTs) == '—' ? 'PermaBuy' : fmtDate(e.snapshot?.expiryTs) },
@@ -19,10 +21,11 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
         </a>
         ) : '—',
       },
-      { label: 'Purchase Price', value: (e.snapshot?.purchasePrice) ?? '—' },
-      { label: 'Process', value: ellip(e.snapshot?.processId) == '—' ? 'Not Yet Known' : ellip(e.snapshot?.processId) },
+      { label: 'Purchase Price', value: e.snapshot?.purchasePrice ? e.snapshot.purchasePrice + ' ARIO' : '—' },
+      { label: 'Process', value: ellip(e.snapshot?.processId) == '—' ? 'Not Yet Known' : ellip(e.snapshot?.processId)         },
     ],
-  }),
+  };
+},
 
   'Extended Lease': (e) => ({
     tag: 'LEASE',
@@ -97,7 +100,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
   'Permanent ANT Purchase': (e) => ({
     tag: 'UPGRADE',
     items: [
-      { label: 'Purchase Price', value: e.snapshot?.purchasePrice },
+      { label: 'Purchase Price', value: e.snapshot?.purchasePrice ? e.snapshot.purchasePrice + ' ARIO' : '—' },
     ],
   }),
 
@@ -154,7 +157,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
         )
       });
     }
-    if (price && price !== '0') items.push({ label: 'Purchase Price', value: price });
+    if (price && Number(price) > 0) items.push({ label: 'Purchase Price', value: price + ' ARIO' });
 
     return { tag: 'INITIAL', items };
   },
