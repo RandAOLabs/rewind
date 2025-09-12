@@ -1,0 +1,97 @@
+/* Aurora wash, black-first palette. Minimal, no globals touched. */
+
+.feeling-lucky {
+  --fg: #f5f7fb;
+  --bg: #0a0a0b;
+  --edge: rgba(255,255,255,0.14);
+  --edge-strong: rgba(255,255,255,0.24);
+  --glow: rgba(120, 185, 255, 0.22);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  /* ↓ breathing room under the three chips */
+  margin-top: 16px;
+
+  /* ↓ pill sizing to match chips */
+  padding: 0.55rem 1rem;
+  border-radius: 9999px;
+
+  border: 1px solid var(--edge);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    var(--bg);
+  color: var(--fg);
+  font: 600 0.9rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+
+  box-shadow:
+    inset 0 0 0.6px rgba(255,255,255,0.25);
+  transition:
+    transform 180ms cubic-bezier(.2,.8,.2,1),
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background-color 220ms ease;
+}
+
+.feeling-lucky__label {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* Aurora wash overlay (subtle) */
+.feeling-lucky__wash {
+  position: absolute;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(18px);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(60% 80% at 15% 25%, rgba( 86,195,255,0.45), transparent 60%),
+    radial-gradient(55% 70% at 85% 20%, rgba(171,131,255,0.35), transparent 65%),
+    radial-gradient(75% 85% at 50% 85%, rgba( 76,255,196,0.28), transparent 60%);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+/* Hover / active */
+.feeling-lucky:hover {
+  transform: translateY(-1px);
+  border-color: var(--edge-strong);
+  box-shadow:
+    inset 0 0 0.8px rgba(255,255,255,0.32),
+    0 8px 22px -10px var(--glow);
+}
+.feeling-lucky:active {
+  transform: translateY(0);
+}
+
+/* Focus ring tuned for dark surfaces */
+.feeling-lucky:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.15),
+    0 0 0 4px rgba(107, 180, 255, 0.35),
+    inset 0 0 0.8px rgba(255,255,255,0.4);
+}
+
+/* Disabled / loading */
+.feeling-lucky[disabled] {
+  cursor: not-allowed;
+  opacity: 0.75;
+  filter: grayscale(8%);
+}
+
+/* Reduced motion: keep the look; no motion */
+@media (prefers-reduced-motion: reduce) {
+  .feeling-lucky__wash {
+    transition: none;
+  }
+}

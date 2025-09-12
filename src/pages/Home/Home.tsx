@@ -3,6 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import FeelingLuckyButton from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
+import { ARIORewindService } from 'ao-js-sdk';
+import { getRewind } from '../History/utils/rewind';
+
+
+const rewind = await getRewind();
+const [one, two, three] = await Promise.all([
+  rewind.getRandomARNSName(),
+  rewind.getRandomARNSName(),
+  rewind.getRandomARNSName(),
+]);
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -61,7 +71,7 @@ export default function Home() {
           <div className="hint">Press <kbd>Enter</kbd> to search</div>
 
           <div className="suggestions" role="list">
-            {['flowweave','infinitely', 'randao' ].map(s => (
+            {[one, two, three].map(s => (
               <button
                 key={s}
                 className="suggestion-chip"

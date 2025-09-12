@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ARIORewindService } from 'ao-js-sdk';
+import './FeelingLuckyButton.css';
 
 /**
  * Compatibility shim: supports ao-js-sdk <=0.2.42 (sync autoConfiguration)
@@ -32,8 +33,16 @@ export default function FeelingLuckyButton() {
   };
 
   return (
-    <button onClick={onClick} disabled={loading} aria-label="I'm Feeling Lucky">
-      {loading ? '…' : "I'm Feeling Lucky"}
+    <button
+      type="button"
+      className="feeling-lucky"
+      onClick={onClick}
+      disabled={loading}
+      aria-label="I'm Feeling Lucky"
+      aria-busy={loading}
+    >
+      <span className="feeling-lucky__label">{loading ? '…' : "I'm Feeling Lucky"}</span>
+      <span className="feeling-lucky__wash" aria-hidden="true" />
     </button>
   );
 }
