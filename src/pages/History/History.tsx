@@ -29,6 +29,23 @@ import { applyDelta, toEpochSeconds, firstDefined } from './utils/data';
 import { buildExtraBox } from './data/extraBoxBuilders';
 import { computeDelta$ } from './data/computeDelta';
 
+// ───────────────────────────────────────────────────────────
+// Async service singleton (local memo; no new files)
+// ───────────────────────────────────────────────────────────
+let rewindPromise: Promise<any> | null = null;
+async function getRewind() {
+  if (!rewindPromise) {
+    rewindPromise = ARIORewindService.autoConfiguration();
+  }
+  return rewindPromise;
+}
+
+// ───────────────────────────────────────────────────────────
+// Loading smoothers
+// ───────────────────────────────────────────────────────────
+const MIN_SPINNER_MS = 400;     // minimum spinner display to avoid flicker
+const EMPTY_DEBOUNCE_MS = 700;  // wait before declaring "no history yet"
+
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
@@ -55,23 +72,49 @@ export default function History() {
   // holobar cursor focus (kept in sync with both card clicks and holobar scrubs)
   const [holoFocusTx, setHoloFocusTx] = useState<string | null>(null);
 
+  // timers + flags for smooth loading
+  const startedAtRef = useRef<{ history: number; ant: number }>({ history: 0, ant: 0 });
+  const timersRef = useRef<{ history?: ReturnType<typeof setTimeout>; ant?: ReturnType<typeof setTimeout>; empty?: ReturnType<typeof setTimeout> }>({});
+  const receivedAnyRef = useRef(false);
+
+  const endHistoryLoadingSmoothly = () => {
+    const elapsed = Date.now() - startedAtRef.current.history;
+    if (elapsed < MIN_SPINNER_MS) {
+      timersRef.current.history && clearTimeout(timersRef.current.history);
+      timersRef.current.history = setTimeout(() => setLoading(false), MIN_SPINNER_MS - elapsed);
+    } else {
+      setLoading(false);
+    }
+  };
+  const endAntLoadingSmoothly = () => {
+    const elapsed = Date.now() - startedAtRef.current.ant;
+    if (elapsed < MIN_SPINNER_MS) {
+      timersRef.current.ant && clearTimeout(timersRef.current.ant);
+      timersRef.current.ant = setTimeout(() => setAntLoading(false), MIN_SPINNER_MS - elapsed);
+    } else {
+      setAntLoading(false);
+    }
+  };
+
   // NEW: cache initial mainnet state once (normalize name to avoid misses)
   const [initialMainnetState, setInitialMainnetState] = useState<any | null>(null);
   useEffect(() => {
+    let alive = true;
     (async () => {
       try {
-        const service = await ARIORewindService.autoConfiguration();
+        const service = await getRewind();
         const canonical = arnsname.trim().toLowerCase();
         const ims = service.getMainnetInitialState
           ? service.getMainnetInitialState(canonical)
-        : undefined;
-      setInitialMainnetState(ims ?? null);
-      console.log('[History] Initial Mainnet State:', ims ?? 'none');
-    } catch (e) {
-      console.warn('[History] getMainnetInitialState failed:', e);
-      setInitialMainnetState(null);
-    }
-  })(), [arnsname]});
+          : undefined;
+        if (alive) setInitialMainnetState(ims ?? null);
+      } catch (e) {
+        console.warn('[History] getMainnetInitialState failed:', e);
+        if (alive) setInitialMainnetState(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [arnsname]);
 
   // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -95,9 +138,6 @@ export default function History() {
     }
     const idx = events.findIndex(e => e.txHash === evt.txHash);
     const snap = idx >= 0 ? snapshots[idx] : undefined;
-    // console.groupCollapsed(`[Select] ${evt.action} ${evt.txHash}`);
-    // console.log('index', idx, 'snapshot', snap);
-    // console.groupEnd();
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
   };
 
@@ -108,41 +148,53 @@ export default function History() {
 
   // fetch ANT detail
   useEffect(() => {
-    (async () => {
-      setAntLoading(true);
-      setAntError(null);
+    let alive = true;
+    startedAtRef.current.ant = Date.now();
+    setAntLoading(true);
+    setAntError(null);
 
-      const service = await ARIORewindService.autoConfiguration();
-      service
-        .getAntDetail(arnsname)
-      .then(detail => setAntDetail(detail))
-      .catch(err => setAntError(err.message || 'Failed to load ANT details'))
-      .finally(() => setAntLoading(false));
+    (async () => {
+      try {
+        const service = await getRewind();
+        const detail = await service.getAntDetail(arnsname);
+        if (alive) setAntDetail(detail);
+      } catch (err: any) {
+        if (alive) setAntError(err?.message || 'Failed to load ANT details');
+      } finally {
+        if (alive) endAntLoadingSmoothly();
+      }
     })();
+
+    return () => {
+      alive = false;
+      if (timersRef.current.ant) clearTimeout(timersRef.current.ant);
+    };
   }, [arnsname, retryToken]);
 
   // Chronological, deterministic rebuild
   useEffect(() => {
     let cancelled = false;
     let sub: Subscription | null = null;
-  
+
+    // reset UI state
+    setEvents([]);
+    setSnapshots([]);
+    startedAtRef.current.history = Date.now();
+    setLoading(true);
+    setError(null);
+    setSelectedEvent(null);
+    receivedAnyRef.current = false;
+    if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
+
     (async () => {
       try {
-        // reset UI state
-        setEvents([]);
-        setSnapshots([]);
-        setLoading(true);
-        setError(null);
-        setSelectedEvent(null);
-  
         type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
         const byTx = new Map<string, Item>();
         let ordCounter = 0;
-        let rebuildPass = 0;
-  
-        const service = await ARIORewindService.autoConfiguration();
+
+        const service = await getRewind();
         if (cancelled) return;
-  
+
         sub = service
           .getEventHistory$(arnsname)
           .pipe(
@@ -159,14 +211,14 @@ export default function History() {
                   const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
                   const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
                   const ts = Number.isFinite(tsNum) ? tsNum : 0;
-  
+
                   const txRaw = await Promise.resolve(e.getEventMessageId?.());
                   const tx = String(txRaw ?? `fallback:${ts}:${idx}`);
-  
+
                   return { e, ts, tx };
                 })
               );
-  
+
               // dedupe/merge by tx
               for (const { e, ts, tx } of batch) {
                 if (!byTx.has(tx)) {
@@ -177,32 +229,28 @@ export default function History() {
                   cur.e = e;
                 }
               }
-  
+
               const all = Array.from(byTx.values()).sort((a, b) => {
                 const at = a.ts || 0, bt = b.ts || 0;
                 return at !== bt ? at - bt : a.ord - b.ord;
               });
-  
+
               let snap = initialSnapshot;
               const ui: TimelineEvent[] = [];
               const snaps: AntSnapshot[] = [];
-  
+
               for (const { e, ts, tx } of all) {
                 const [actor, delta] = await Promise.all([
                   Promise.resolve(e.getInitiator?.()),
                   firstValueFrom(computeDelta$(e)),
                 ]);
-  
-                const before = snap;
-                const after = applyDelta(snap, delta);
-                void before; // keep if you log; otherwise silence TS
-  
-                snap = after;
-  
+
+                snap = applyDelta(snap, delta);
+
                 const cls = e.constructor?.name ?? 'Unknown';
                 const action = classToAction(cls);
                 const legendKey = classToLegend(cls);
-  
+
                 const uiEvt: TimelineEvent = {
                   action,
                   actor: actor ?? '',
@@ -213,11 +261,11 @@ export default function History() {
                   snapshot: snap,
                 };
                 uiEvt.extraBox = buildExtraBox(uiEvt);
-  
+
                 ui.push(uiEvt);
                 snaps.push(snap);
               }
-  
+
               // Inject Initial Mainnet State (if present)
               try {
                 const ims = initialMainnetState;
@@ -237,36 +285,20 @@ export default function History() {
                     Promise.resolve(ims.getEndTime?.()),
                     Promise.resolve(ims.getUndernameLimit?.()),
                   ]);
-  
-                  const microAmt = purchasePriceCA?.amount?.();
-                  const purchasePrice =
-                    typeof microAmt === 'bigint'
-                      ? (microAmt / 1_000_000n).toString()
-                      : undefined;
-  
-                  const toEpochSeconds = (v: any): number => {
-                    const n =
-                      typeof v === 'number'
-                        ? v
-                        : typeof v === 'bigint'
-                        ? Number(v)
-                        : Number(v ?? 0);
-                    return Number.isFinite(n) ? n : 0;
-                  };
-  
+
                   const initialSnap: AntSnapshot = {
                     ...initialSnapshot,
                     processId: processId ?? '',
-                    purchasePrice,
+                    purchasePrice: purchasePriceCA?.toString?.() ?? String(purchasePriceCA ?? ''),
                     startTime: toEpochSeconds(startTime) * 1000,
-                    expiryTs: toEpochSeconds(endTime) * 1000,
+                    expiryTs:  toEpochSeconds(endTime)   * 1000,
                     undernameLimit,
                     description: type ? String(type) : undefined,
                   };
-  
+
                   const tsCandidate = ims.getEventTimeStamp?.();
-                  const tsSec = toEpochSeconds(tsCandidate ?? startTime);
-  
+                  const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
+
                   const initEvt: TimelineEvent = {
                     action: 'Initial Mainnet State',
                     actor: '',
@@ -277,41 +309,54 @@ export default function History() {
                     snapshot: initialSnap,
                   };
                   initEvt.extraBox = buildExtraBox(initEvt);
-  
+
                   ui.unshift(initEvt);
                   snaps.unshift(initialSnap);
                 }
               } catch (e) {
-                console.warn('[InitialMainnetState] failed to attach:', e);
+                // non-fatal
               }
-  
-              rebuildPass += 1;
-              void rebuildPass; // silence TS if unused
-  
+
+              // Decide when to end loading:
               if (!cancelled) {
-                setEvents(ui);
-                setSnapshots(snaps);
-                setLoading(false);
+                if (ui.length > 0) {
+                  receivedAnyRef.current = true;
+                  if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
+                  setEvents(ui);
+                  setSnapshots(snaps);
+                  endHistoryLoadingSmoothly();
+                } else if (!receivedAnyRef.current && !timersRef.current.empty) {
+                  // debounce empty before showing "no history"
+                  timersRef.current.empty = setTimeout(() => {
+                    if (!receivedAnyRef.current && !cancelled) {
+                      setEvents([]);
+                      setSnapshots([]);
+                      endHistoryLoadingSmoothly();
+                    }
+                  }, EMPTY_DEBOUNCE_MS);
+                }
               }
             },
             error: (err: any) => {
               if (!cancelled) {
                 setError(err?.message ?? 'Failed to load history');
-                setLoading(false);
+                endHistoryLoadingSmoothly();
               }
             },
           });
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message ?? 'Failed to initialize history service');
-          setLoading(false);
+          endHistoryLoadingSmoothly();
         }
       }
     })();
-  
+
     return () => {
       cancelled = true;
       if (sub) sub.unsubscribe();
+      if (timersRef.current.history) clearTimeout(timersRef.current.history);
+      if (timersRef.current.empty) clearTimeout(timersRef.current.empty);
     };
   }, [arnsname, retryToken, initialMainnetState]);
 
