@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import FeelingLuckyButton from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
 
@@ -72,6 +73,8 @@ export default function Home() {
               </button>
             ))}
           </div>
+          <FeelingLuckyButton />
+
         </section>
       </main>
 

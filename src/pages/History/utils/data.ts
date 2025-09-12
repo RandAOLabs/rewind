@@ -76,36 +76,6 @@ export function toEpochSeconds(ts: any): number {
   return n >= 1e12 ? Math.floor(n / 1000) : Math.floor(n);
 }
 
-/** scale tiny decimals to atomic integer if needed; otherwise pass-through digits */
-export function normalizePurchasePrice(raw: any): string | undefined {
-  if (raw == null) return undefined;
-  const maybeAtomic =
-    (typeof raw === 'object' && raw !== null && (
-      (raw as any).atomic ?? (raw as any).winston ?? (raw as any).value ?? (raw as any).amount
-    ));
-
-  let s = '';
-  if (maybeAtomic !== undefined) {
-    s = String(maybeAtomic).trim();
-  } else if (typeof raw === 'string' || typeof raw === 'number') {
-    s = String(raw).trim();
-  } else if (typeof (raw as any)?.toString === 'function') {
-    s = String((raw as any).toString()).trim();
-  }
-  if (!s) return undefined;
-
-  if (/^\d+$/.test(s)) return s === '0' ? undefined : s;
-
-  const f = Number(s);
-  if (Number.isFinite(f) && f > 0 && f < 1) {
-    const scaled = Math.round(f * 1e18);
-    return scaled > 0 ? String(scaled) : undefined;
-    }
-
-  const digits = s.replace(/[^\d]/g, '');
-  return digits && digits !== '0' ? digits : undefined;
-}
-
 export function titleizeType(raw?: string): string | undefined {
   if (!raw) return undefined;
   const t = String(raw).trim();

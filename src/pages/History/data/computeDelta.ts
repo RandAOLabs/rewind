@@ -8,7 +8,8 @@ import {
     StateNoticeEvent,
     CreditNoticeEvent,
     ReturnedNameEvent,
-    IARNSEvent
+    IARNSEvent,
+    CurrencyAmount
   } from 'ao-js-sdk';
   
   import { Observable, forkJoin, of } from 'rxjs';
@@ -49,18 +50,23 @@ import {
   
       case BuyNameEvent.name: {
         const e = ev as BuyNameEvent;
+
+        const purchasePrice$ = toObs((e as any).getPurchasePrice?.());
+        const displayPrice$ = purchasePrice$.pipe(map((pp: CurrencyAmount) => pp.amount() / BigInt(10 ** 6)));
         return forkJoin({
           ownerBuyer: toObs((e as any).getBuyer?.()),
           initiator:  toObs((e as any).getInitiator?.()),
           processId:  toObs((e as any).getProcessId?.()),
           leaseEnd:   toObs((e as any).getLeaseEnd?.()),
           newExpiry:  toObs((e as any).getNewExpiry?.()),
+          purchasePrice: displayPrice$,
         }).pipe(
           map((res: any) =>
             stripUndef({
               owner:     firstDefined(res.ownerBuyer, res.initiator),
               processId: res.processId,
               expiryTs:  firstDefined(res.leaseEnd, res.newExpiry),
+              purchasePrice: res.purchasePrice,
             })
           ),
           map(sanitizeDelta)
@@ -121,7 +127,7 @@ import {
       case UpgradeNameEvent.name: {
         const e = ev as UpgradeNameEvent;
         const startTime        = toObs((e as any).getStartTime?.());
-        const getPurchasePrice = toObs((e as any).getPurchasePrice?.());
+        const getPurchasePrice = toObs((e as any).getPurchasePrice?.()).pipe(map((pp: CurrencyAmount) => pp.amount() / BigInt(10 ** 6)));
         const undernameLimit   = toObs((e as any).getUndernameLimit?.());
         return forkJoin({ startTime, getPurchasePrice, undernameLimit }).pipe(
           map(({ startTime, getPurchasePrice, undernameLimit }: any) => ({
