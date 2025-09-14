@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ARIORewindService } from 'ao-js-sdk';
+import { RandAOService } from 'ao-js-sdk';
 import './FeelingLuckyButton.css';
+import namesRaw from './arns-names.csv?raw';
 
-/**
- * Compatibility shim: supports ao-js-sdk <=0.2.42 (sync autoConfiguration)
- * and >=0.2.43 (async autoConfiguration with getRandomARNSName()).
- */
-async function getRewind(): Promise<{ getRandomARNSName(): Promise<string> }> {
-  const maybe = (ARIORewindService as any).autoConfiguration();
-  // If it returned a Promise (>=0.2.43), await it; else use value directly.
-  return typeof (maybe as any)?.then === 'function' ? await maybe : (maybe as any);
+const arnsNames: string[] = namesRaw
+  .split(/\r?\n/)                       // lines
+  .map(l => l.split(',')[0]?.trim())    // first column
+  .filter(Boolean)                      // drop empty
+  .filter(n => n.toLowerCase() !== 'name'); // optional: skip header "name"
+
+const service = await RandAOService.autoConfiguration();
+
+
+export const getRandomARNSName = async () => {
+  const entropy = await service.getMostRecentEntropy();
+  const name = arnsNames[Math.floor(Math.random() * arnsNames.length)];
+  return name;
 }
 
-export default function FeelingLuckyButton() {
+export function FeelingLuckyButton() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -21,8 +27,8 @@ export default function FeelingLuckyButton() {
     if (loading) return;
     setLoading(true);
     try {
-      const rewind = await getRewind();
-      const name = await rewind.getRandomARNSName();
+      const name = await getRandomARNSName();
+      
       if (name) navigate(`/history/${encodeURIComponent(name)}`);
     } catch (err) {
       console.error('FeelingLuckyButton error:', err);
