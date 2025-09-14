@@ -9,7 +9,10 @@ import {
     UpgradeNameEvent,
     StateNoticeEvent,
     CreditNoticeEvent,
-    DebitNoticeEvent
+    DebitNoticeEvent,
+    SetNameNoticeEvent,
+    SetDescriptionNoticeEvent,
+    SetTickerNoticeEvent,
   } from 'ao-js-sdk';
   
   export function classToAction(cls: string): string {
@@ -25,6 +28,9 @@ import {
       case StateNoticeEvent.name:       return 'State Notice';
       case CreditNoticeEvent.name:      return 'Ownership Transfer';
       case DebitNoticeEvent.name:       return 'Debit Notice';
+      case SetNameNoticeEvent.name:     return 'Set Name Notice';
+      case SetDescriptionNoticeEvent.name: return 'Set Description Notice';
+      case SetTickerNoticeEvent.name:   return 'Set Ticker Notice';
       default:                          return 'Unknown Event';
     }
   }
@@ -42,7 +48,9 @@ import {
       case StateNoticeEvent.name:       return 'ant-state-change';
       case CreditNoticeEvent.name:      return 'ant-ownership-transfer';
       case DebitNoticeEvent.name:       return 'ant-debit-notice';
+      case SetNameNoticeEvent.name:     return 'ant-name-set  ';
+      case SetDescriptionNoticeEvent.name: return 'ant-description-set';
+      case SetTickerNoticeEvent.name:   return 'ant-ticker-set';
       default:                          return 'multiple-changes';
     }
   }
-  

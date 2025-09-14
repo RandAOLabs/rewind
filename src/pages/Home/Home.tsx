@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FeelingLuckyButton from './components/FeelingLuckyButton';
+import {FeelingLuckyButton, getRandomARNSName} from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
-import { ARIORewindService } from 'ao-js-sdk';
 import { getRewind } from '../History/utils/rewind';
-
 
 const rewind = await getRewind();
 const [one, two, three] = await Promise.all([
-  rewind.getRandomARNSName(),
-  rewind.getRandomARNSName(),
-  rewind.getRandomARNSName(),
+  getRandomARNSName(),
+  getRandomARNSName(),
+  getRandomARNSName(),
 ]);
 
 export default function Home() {

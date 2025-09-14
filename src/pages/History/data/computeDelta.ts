@@ -8,6 +8,9 @@ import {
     StateNoticeEvent,
     CreditNoticeEvent,
     ReturnedNameEvent,
+    SetNameNoticeEvent,
+    SetDescriptionNoticeEvent,
+    SetTickerNoticeEvent,
     IARNSEvent,
     CurrencyAmount
   } from 'ao-js-sdk';

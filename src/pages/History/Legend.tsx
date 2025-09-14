@@ -15,6 +15,9 @@ const ITEMS: Array<{ key: string; label: string }> = [
   { key: 'ant-controller-addition', label: 'Controller Addition' },
   { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
   { key: 'ant-ownership-transfer',  label: 'Ownership Transfer' },
+  { key: 'ant-name-set',            label: 'Name Set' },
+  { key: 'ant-description-set',     label: 'Description Set' },
+  { key: 'ant-ticker-set',          label: 'Ticker Set' },
   // { key: 'initial-mainnet-state',   label: 'Initial State' },
 ];
 

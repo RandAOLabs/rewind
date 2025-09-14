@@ -254,6 +254,10 @@
 .legend-square.ant-upgrade-event,       .legend-swatch.ant-upgrade-event       { background: #98dda4; }
 .legend-square.ant-extend-lease-event,  .legend-swatch.ant-extend-lease-event  { background: #ffd000; }
 .legend-square.ant-ownership-transfer,  .legend-swatch.ant-ownership-transfer  { background: #00ff00; }
+.legend-square.ant-name-set,            .legend-swatch.ant-name-set            { background: #c300ff; }
+.legend-square.ant-description-set,     .legend-swatch.ant-description-set     { background: #b15500; }
+.legend-square.ant-ticker-set,          .legend-swatch.ant-ticker-set          { background: #7e4848; }
+
 /* monospace helper */
 .controller { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
 

@@ -414,6 +414,7 @@ export default function History() {
 
   const uniqueMap = new Map<string, TimelineEvent>();
   events.forEach(evt => {
+    console.log(evt);
     if (!uniqueMap.has(evt.txHash)) uniqueMap.set(evt.txHash, evt);
   });
 
