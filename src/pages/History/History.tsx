@@ -432,16 +432,60 @@ export default function History() {
     ? baseEvents
     : baseEvents.filter(e => activeLegend.has(e.legendKey));
 
-  const timelineEvents = visibleEvents
+  // same sort + filters you already use
+  const sortByUiOrder = (a: TimelineEvent, b: TimelineEvent) => {
+    const aInit = a.legendKey === 'initial-mainnet-state' ? 1 : 0;
+    const bInit = b.legendKey === 'initial-mainnet-state' ? 1 : 0;
+    if (aInit !== bInit) return bInit - aInit;
+    return a.timestamp - b.timestamp;
+  };
+
+  const notExcluded = (e: TimelineEvent) => !excludedActions.includes(e.action);
+
+  // Match your labels/keys—adjust if your exact ids differ
+  const isOwnershipTransfer = (e: TimelineEvent) => {
+    const t = `${e.legendKey || ''} ${e.action || ''}`.toLowerCase();
+    return (
+      t.includes('ownership transfer') ||
+      /transfer.*owner/.test(t) ||
+      /owner(ship)?\s*(set|changed)/.test(t)
+    );
+  };
+
+  const isAntPurchase = (e: TimelineEvent) => {
+    const k = (e.legendKey || '').toLowerCase();
+    const a = (e.action || '').toLowerCase();
+    // try to be specific to “ANT name card” style purchases
+    return (
+      k.includes('purchase') && (k.includes('ant') || k.includes('name')) ||
+      a.includes('purchase') && (a.includes('ant') || a.includes('name'))
+      // If you have exact keys like 'ant-name-purchased', add: || k === 'ant-name-purchased'
+    );
+  };
+
+  // Build sequence on full baseEvents (so legend toggles don’t affect pairing)
+  const removableTransfers = (() => {
+    const seq = baseEvents.slice().sort(sortByUiOrder).filter(notExcluded);
+    const remove = new Set<string>();
+    for (let i = 0; i < seq.length - 1; i++) {
+      const curr = seq[i];
+      const next = seq[i + 1];
+      // Remove TRANSFER that is immediately followed by a PURCHASE
+      if (isOwnershipTransfer(curr) && isAntPurchase(next)) {
+        remove.add(curr.txHash);
+      }
+    }
+    return remove;
+  })();
+
+  // Final cards source (pruned)
+  const cardsSource = visibleEvents
     .slice()
-    .sort((a, b) => {
-      const aInit = a.legendKey === 'initial-mainnet-state' ? 1 : 0;
-      const bInit = b.legendKey === 'initial-mainnet-state' ? 1 : 0;
-      if (aInit !== bInit) return bInit - aInit;
-      return a.timestamp - b.timestamp;
-    })
-    .filter(st => !excludedActions.includes(st.action))
-    .map((st, i) => {
+    .sort(sortByUiOrder)
+    .filter(notExcluded)
+    .filter(e => !removableTransfers.has(e.txHash));
+
+  const timelineEvents = cardsSource.map((st, i) => {
       const isSelected = selectedEvent?.txHash === st.txHash;
       const isInitial  = st.legendKey === 'initial-mainnet-state';
       return {
