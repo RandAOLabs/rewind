@@ -451,7 +451,7 @@ export default function History() {
 
   const isBuyNameNotice = (e: TimelineEvent) =>
     BUY_NAME_KEYS.includes((e.legendKey || '').toLowerCase()) ||
-    /buy.*name.*notice/i.test(`${e.legendKey} ${e.action}`);
+    /purchased.*ant.*name/i.test(`${e.legendKey} ${e.action}`);
 
   // 1) Sort & filter like before
   const sortedFiltered = visibleEvents
