@@ -432,59 +432,50 @@ export default function History() {
     ? baseEvents
     : baseEvents.filter(e => activeLegend.has(e.legendKey));
 
-  // same sort + filters you already use
+  // Build once, right after you compute baseEvents / visibleEvents:
+  const indexByTx = new Map(baseEvents.map((e, i) => [e.txHash, i]));
+
   const sortByUiOrder = (a: TimelineEvent, b: TimelineEvent) => {
     const aInit = a.legendKey === 'initial-mainnet-state' ? 1 : 0;
     const bInit = b.legendKey === 'initial-mainnet-state' ? 1 : 0;
     if (aInit !== bInit) return bInit - aInit;
-    return a.timestamp - b.timestamp;
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    // tie-break by original appearance to keep things stable
+    return (indexByTx.get(a.txHash) ?? 0) - (indexByTx.get(b.txHash) ?? 0);
   };
 
   const notExcluded = (e: TimelineEvent) => !excludedActions.includes(e.action);
 
-  // Match your labels/keys—adjust if your exact ids differ
-  const isOwnershipTransfer = (e: TimelineEvent) => {
-    const t = `${e.legendKey || ''} ${e.action || ''}`.toLowerCase();
-    return (
-      t.includes('ownership transfer') ||
-      /transfer.*owner/.test(t) ||
-      /owner(ship)?\s*(set|changed)/.test(t)
-    );
-  };
+  // Update these to your real legend keys if you have exact values in classToLegend
+  const BUY_NAME_KEYS = ['buy-name-notice', 'buynamenotice'];
 
-  const isAntPurchase = (e: TimelineEvent) => {
-    const k = (e.legendKey || '').toLowerCase();
-    const a = (e.action || '').toLowerCase();
-    // try to be specific to “ANT name card” style purchases
-    return (
-      k.includes('purchase') && (k.includes('ant') || k.includes('name')) ||
-      a.includes('purchase') && (a.includes('ant') || a.includes('name'))
-      // If you have exact keys like 'ant-name-purchased', add: || k === 'ant-name-purchased'
-    );
-  };
+  const isBuyNameNotice = (e: TimelineEvent) =>
+    BUY_NAME_KEYS.includes((e.legendKey || '').toLowerCase()) ||
+    /buy.*name.*notice/i.test(`${e.legendKey} ${e.action}`);
 
-  // Build sequence on full baseEvents (so legend toggles don’t affect pairing)
-  const removableTransfers = (() => {
-    const seq = baseEvents.slice().sort(sortByUiOrder).filter(notExcluded);
-    const remove = new Set<string>();
-    for (let i = 0; i < seq.length - 1; i++) {
-      const curr = seq[i];
-      const next = seq[i + 1];
-      // Remove TRANSFER that is immediately followed by a PURCHASE
-      if (isOwnershipTransfer(curr) && isAntPurchase(next)) {
-        remove.add(curr.txHash);
-      }
-    }
-    return remove;
-  })();
-
-  // Final cards source (pruned)
-  const cardsSource = visibleEvents
+  // 1) Sort & filter like before
+  const sortedFiltered = visibleEvents
     .slice()
     .sort(sortByUiOrder)
-    .filter(notExcluded)
-    .filter(e => !removableTransfers.has(e.txHash));
+    .filter(notExcluded);
 
+  // 2) Keep Initial Mainnet State (if present) at absolute top
+  const initialIdx = sortedFiltered.findIndex(e => e.legendKey === 'initial-mainnet-state');
+  const initialPart = initialIdx >= 0 ? [sortedFiltered[initialIdx]] : [];
+  const rest = initialIdx >= 0
+    ? sortedFiltered.filter((_, i) => i !== initialIdx)
+    : sortedFiltered;
+
+  // 3) Pin BuyNameNotice first among the remaining cards
+  const buyIdx = rest.findIndex(isBuyNameNotice);
+  const restOrdered = buyIdx >= 0
+    ? [rest[buyIdx], ...rest.slice(0, buyIdx), ...rest.slice(buyIdx + 1)]
+    : rest;
+
+  // 4) Final source for cards
+  const cardsSource = [...initialPart, ...restOrdered];
+
+  // 5) Render
   const timelineEvents = cardsSource.map((st, i) => {
       const isSelected = selectedEvent?.txHash === st.txHash;
       const isInitial  = st.legendKey === 'initial-mainnet-state';
