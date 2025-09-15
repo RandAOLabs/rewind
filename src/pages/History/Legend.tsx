@@ -9,16 +9,15 @@ interface LegendProps {
 const ITEMS: Array<{ key: string; label: string }> = [
   { key: 'ant-buy-event',           label: 'ANT Purchase' },
   { key: 'ant-reassign-event',      label: 'ANT Process Change' },
+  { key: 'ant-name-set',            label: 'ANT Name Set' },
+  { key: 'ant-description-set',     label: 'ANT Description Set' },
+  { key: 'ant-ticker-set',          label: 'ANT Ticker Set' },
   { key: 'ant-upgrade-event',       label: 'Permanent ANT Purchase' },
   { key: 'ant-content-change',      label: 'Content Change' },
   { key: 'undername-creation',      label: 'Increased Undername Limit' },
   { key: 'ant-controller-addition', label: 'Controller Addition' },
   { key: 'ant-extend-lease-event',  label: 'Extend Lease' },
   { key: 'ant-ownership-transfer',  label: 'Ownership Transfer' },
-  { key: 'ant-name-set',            label: 'Name Set' },
-  { key: 'ant-description-set',     label: 'Description Set' },
-  { key: 'ant-ticker-set',          label: 'Ticker Set' },
-  // { key: 'initial-mainnet-state',   label: 'Initial State' },
 ];
 
 export default function Legend({ activeLegend, onToggle, onReset }: LegendProps) {

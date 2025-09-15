@@ -34,6 +34,20 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     ],
   }),
 
+  'Set ANT Ticker': (e) => ({
+    tag: 'TICKER',
+    items: [
+      { label: 'New Ticker', value: String(e.snapshot?.ticker ?? '—') },
+    ],
+  }),
+
+  'Set ANT Description': (e) => ({
+    tag: 'DESCRIPTION',
+    items: [
+      { label: 'New Description', value: String(e.snapshot?.description ?? '—') },
+    ],
+  }),
+
   'Increased Undername Limit': (e) => ({
     tag: 'LIMIT',
     items: [
