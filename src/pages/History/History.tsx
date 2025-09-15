@@ -449,15 +449,28 @@ export default function History() {
   // Update these to your real legend keys if you have exact values in classToLegend
   const BUY_NAME_KEYS = ['buy-name-notice', 'buynamenotice'];
 
+  // NEW: ownership transfer keys (tweak to your exact legendKey values if you have them)
+  const TRANSFER_KEYS = ['ownership-transfer', 'owner-set', 'owner-changed'];
+
+  // helpers
   const isBuyNameNotice = (e: TimelineEvent) =>
     BUY_NAME_KEYS.includes((e.legendKey || '').toLowerCase()) ||
     /purchased.*ant.*name/i.test(`${e.legendKey} ${e.action}`);
 
+  const isOwnershipTransfer = (e: TimelineEvent) =>
+    TRANSFER_KEYS.includes((e.legendKey || '').toLowerCase()) ||
+    /ownership\s*transfer|transfer.*owner|owner(ship)?\s*(set|changed)/i.test(
+      `${e.legendKey} ${e.action}`
+    );
+
+  // compare by local calendar day (matches how you display dates)
+  const dayKey = (tsSec: number) => {
+    const d = new Date(tsSec * 1000);
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  };
+
   // 1) Sort & filter like before
-  const sortedFiltered = visibleEvents
-    .slice()
-    .sort(sortByUiOrder)
-    .filter(notExcluded);
+  const sortedFiltered = visibleEvents.slice().sort(sortByUiOrder).filter(notExcluded);
 
   // 2) Keep Initial Mainnet State (if present) at absolute top
   const initialIdx = sortedFiltered.findIndex(e => e.legendKey === 'initial-mainnet-state');
@@ -472,45 +485,62 @@ export default function History() {
     ? [rest[buyIdx], ...rest.slice(0, buyIdx), ...rest.slice(buyIdx + 1)]
     : rest;
 
+  // 3.5) NEW: If BuyNameNotice exists, move the FIRST same-day Ownership Transfer
+  //       to be immediately after it.
+  if (buyIdx >= 0 && restOrdered.length > 1) {
+    const buyEvent = restOrdered[0]; // we just pinned it
+    const buyDay = dayKey(buyEvent.timestamp);
+
+    const sameDayTransferIdx = restOrdered.findIndex(
+      (e, i) => i > 0 && isOwnershipTransfer(e) && dayKey(e.timestamp) === buyDay
+    );
+
+    // if found and not already directly after the buy, move it to index 1
+    if (sameDayTransferIdx > 1) {
+      const [transferEvt] = restOrdered.splice(sameDayTransferIdx, 1);
+      restOrdered.splice(1, 0, transferEvt);
+    }
+  }
+
   // 4) Final source for cards
   const cardsSource = [...initialPart, ...restOrdered];
 
   // 5) Render
   const timelineEvents = cardsSource.map((st, i) => {
-      const isSelected = selectedEvent?.txHash === st.txHash;
-      const isInitial  = st.legendKey === 'initial-mainnet-state';
-      return {
-        key: `${st.txHash}-${i}`,
-        content: (
-          <div
-            className={`chain-card${!isInitial ? ' clickable' : ''}${isSelected ? ' selected' : ''}`}
-            ref={el => { cardRefs.current[st.txHash] = el; }}
-            onClick={!isInitial ? () => onCardClick(st) : undefined}
-          >
-            <div className="chain-card-header">
-              <span className="action-text">{st.action}</span>
-              {!isInitial && <span className="actor">Actor: {st.actor.slice(0,5)}</span>}
-              <span className={`legend-square ${st.legendKey}`}></span>
-            </div>
-            <hr />
-            <div className="chain-card-footer">
-              <span className="date">
-                {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
-                  year: 'numeric', month: 'short', day: 'numeric'
-                })}
+    const isSelected = selectedEvent?.txHash === st.txHash;
+    const isInitial  = st.legendKey === 'initial-mainnet-state';
+    return {
+      key: `${st.txHash}-${i}`,
+      content: (
+        <div
+          className={`chain-card${!isInitial ? ' clickable' : ''}${isSelected ? ' selected' : ''}`}
+          ref={el => { cardRefs.current[st.txHash] = el; }}
+          onClick={!isInitial ? () => onCardClick(st) : undefined}
+        >
+          <div className="chain-card-header">
+            <span className="action-text">{st.action}</span>
+            {!isInitial && <span className="actor">Actor: {st.actor.slice(0,5)}</span>}
+            <span className={`legend-square ${st.legendKey}`}></span>
+          </div>
+          <hr />
+          <div className="chain-card-footer">
+            <span className="date">
+              {new Date(st.timestamp * 1000).toLocaleDateString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric'
+              })}
+            </span>
+            {!isInitial && (
+              <span className="txid">
+                <a
+                  href={`https://www.ao.link/#/message/${st.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {st.txHash}
+                </a>
               </span>
-              {!isInitial && (
-                <span className="txid">
-                  <a
-                    href={`https://www.ao.link/#/message/${st.txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {st.txHash}
-                  </a>
-                </span>
-              )}
-            </div>
+            )}
+          </div>
 
             {st.extraBox && (
               <div className="chain-card-extra">

@@ -76,6 +76,26 @@ import {
         );
       }
   
+      case SetTickerNoticeEvent.name: {
+        const e = ev as SetTickerNoticeEvent;
+        return forkJoin({
+          ticker: toObs((e as any).getTicker?.()),
+        }).pipe(
+          map((res: any) => stripUndef({ ticker: res.ticker })),
+          map(sanitizeDelta)
+        );
+      }
+
+      case SetDescriptionNoticeEvent.name: {
+        const e = ev as SetDescriptionNoticeEvent;
+        return forkJoin({
+          description: toObs((e as any).getDescription?.()),
+        }).pipe(
+          map((res: any) => stripUndef({ description: res.description })),
+          map(sanitizeDelta)
+        );
+      }
+
       case ReassignNameEvent.name: {
         const e = ev as ReassignNameEvent;
         return forkJoin({
