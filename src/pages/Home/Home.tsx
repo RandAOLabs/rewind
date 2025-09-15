@@ -1,20 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {FeelingLuckyButton, getRandomARNSName} from './components/FeelingLuckyButton';
+import FeelingLuckyButton, { getRandomARNSName } from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
-import { getRewind } from '../History/utils/rewind';
-
-const rewind = await getRewind();
-const [one, two, three] = await Promise.all([
-  getRandomARNSName(),
-  getRandomARNSName(),
-  getRandomARNSName(),
-]);
+// import { getRewind } from '../History/utils/rewind'; // no top-level await
 
 export default function Home() {
   const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const navigate = useNavigate();
+
+  // Initialize stuff that previously used top-level await
+  useEffect(() => {
+    let cancelled = false;
+
+    // If you actually need rewind here, uncomment:
+    // (async () => {
+    //   try { await getRewind(); } catch (e) { console.error(e); }
+    // })();
+
+    (async () => {
+      try {
+        const [one, two, three] = await Promise.all([
+          getRandomARNSName(),
+          getRandomARNSName(),
+          getRandomARNSName(),
+        ]);
+        if (!cancelled) setSuggestions([one, two, three]);
+      } catch (e) {
+        console.error('suggestions init failed:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   const goToDetail = () => {
     const name = query.trim().toLowerCase();
@@ -26,7 +45,6 @@ export default function Home() {
     goToDetail();
   };
 
-  // optional, click a suggestion to fill + search
   const useSuggestion = (s: string) => {
     setQuery(s);
     navigate(`/history/${encodeURIComponent(s)}`);
@@ -34,7 +52,6 @@ export default function Home() {
 
   return (
     <div className="home">
-      {/* soft animated aurora */}
       <div className="home-aurora" aria-hidden="true" />
 
       <main className="hero">
@@ -69,7 +86,7 @@ export default function Home() {
           <div className="hint">Press <kbd>Enter</kbd> to search</div>
 
           <div className="suggestions" role="list">
-            {[one, two, three].map(s => (
+            {(suggestions.length ? suggestions : []).map(s => (
               <button
                 key={s}
                 className="suggestion-chip"
@@ -81,8 +98,8 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <FeelingLuckyButton />
 
+          <FeelingLuckyButton />
         </section>
       </main>
 
