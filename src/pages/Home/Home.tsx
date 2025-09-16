@@ -3,24 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import FeelingLuckyButton, { getRandomARNSName } from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
-// import { getRewind } from '../History/utils/rewind'; // no top-level await
 
 export default function Home() {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState<boolean>(true);
   const navigate = useNavigate();
 
-  // Initialize stuff that previously used top-level await
   useEffect(() => {
     let cancelled = false;
-
-    // If you actually need rewind here, uncomment:
-    // (async () => {
-    //   try { await getRewind(); } catch (e) { console.error(e); }
-    // })();
-
     (async () => {
       try {
+        setLoadingSuggestions(true);
         const [one, two, three] = await Promise.all([
           getRandomARNSName(),
           getRandomARNSName(),
@@ -29,9 +23,11 @@ export default function Home() {
         if (!cancelled) setSuggestions([one, two, three]);
       } catch (e) {
         console.error('suggestions init failed:', e);
+        if (!cancelled) setSuggestions([]);
+      } finally {
+        if (!cancelled) setLoadingSuggestions(false);
       }
     })();
-
     return () => { cancelled = true; };
   }, []);
 
@@ -85,21 +81,40 @@ export default function Home() {
 
           <div className="hint">Press <kbd>Enter</kbd> to search</div>
 
-          <div className="suggestions" role="list">
-            {(suggestions.length ? suggestions : []).map(s => (
-              <button
-                key={s}
-                className="suggestion-chip"
-                role="listitem"
-                onClick={() => useSuggestion(s)}
-                aria-label={`Search ${s}`}
-              >
-                {s}
-              </button>
-            ))}
+          {/* Suggestions block with loading state */}
+          <div className="suggestions-wrap" aria-live="polite">
+            <div className="suggestions-heading">
+              {loadingSuggestions ? 'Random names loading…' : ''}
+            </div>
+
+            <div className="suggestions" role="list">
+              {loadingSuggestions
+                ? [0, 1, 2].map(i => (
+                    <span
+                      key={`skeleton-${i}`}
+                      className="suggestion-chip chip-skeleton"
+                      aria-hidden="true"
+                    />
+                  ))
+                : suggestions.map(s => (
+                    <button
+                      key={s}
+                      className="suggestion-chip"
+                      role="listitem"
+                      onClick={() => useSuggestion(s)}
+                      aria-label={`Search ${s}`}
+                    >
+                      {s}
+                    </button>
+                  ))
+              }
+            </div>
+
           </div>
 
           <FeelingLuckyButton />
+          <div className="powered-by">Powered by RandAO</div>
+
         </section>
       </main>
 

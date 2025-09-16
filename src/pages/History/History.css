@@ -299,9 +299,8 @@
 /* Loading overlay + spinner */
 .loading-screen {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.8);
   display: flex; align-items: center; justify-content: center;
-  z-index: 2000;
+  z-index: 100;
 }
 .spinner {
   width: 3rem; height: 3rem;
