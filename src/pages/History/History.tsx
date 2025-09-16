@@ -456,7 +456,7 @@ export default function History() {
   // helpers
   const isBuyNameNotice = (e: TimelineEvent) =>
     BUY_NAME_KEYS.includes((e.legendKey || '').toLowerCase()) ||
-    /purchased.*ant.*name/i.test(`${e.legendKey} ${e.action}`);
+    /arns.*name.*purchase/i.test(`${e.legendKey} ${e.action}`);
 
   const isOwnershipTransfer = (e: TimelineEvent) =>
     TRANSFER_KEYS.includes((e.legendKey || '').toLowerCase()) ||

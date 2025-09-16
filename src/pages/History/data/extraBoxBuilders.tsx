@@ -5,7 +5,7 @@ import { titleizeType } from '../utils/data';
 import type { TimelineEvent, ExtraItem, ExtraBox } from '../types';
 
 const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefined> = {
-  'Purchased ANT Name': (e) => {
+  'ARNS Name Purchase': (e) => {
     const price = e.snapshot?.purchasePrice;
     return {
     tag: 'LEASE',
@@ -111,7 +111,7 @@ const extraBoxBuilders: Record<string, (e: TimelineEvent) => ExtraBox | undefine
     };
   },
 
-  'Permanent ANT Purchase': (e) => ({
+  'Permanent ARNS Name Purchase': (e) => ({
     tag: 'UPGRADE',
     items: [
       { label: 'Purchase Price', value: e.snapshot?.purchasePrice ? e.snapshot.purchasePrice + ' ARIO' : '—' },
