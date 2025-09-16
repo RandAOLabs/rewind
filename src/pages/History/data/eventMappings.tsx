@@ -12,23 +12,26 @@ import {
     SetNameNoticeEvent,
     SetDescriptionNoticeEvent,
     SetTickerNoticeEvent,
+    ReassignNameNoticeEvent,
+    ReassignNameEvent
   } from 'ao-js-sdk';
   
   export function classToAction(cls: string): string {
     switch (cls) {
-      case BuyNameEvent.name:           return 'Purchased ANT Name';
+      case BuyNameEvent.name:           return 'ARNS Name Purchase';
       case ReturnedNameEvent.name:      return 'Returned ANT Name';
       case ExtendLeaseEvent.name:       return 'Extended Lease';
       case IncreaseUndernameEvent.name: return 'Increased Undername Limit';
       case RecordEvent.name:            return 'RecordEvent';
       case SetRecordEvent.name:         return 'Set Record Content';
-      case UpgradeNameEvent.name:       return 'Permanent ANT Purchase';  
+      case UpgradeNameEvent.name:       return 'Permanent ARNS Name Purchase';  
       case StateNoticeEvent.name:       return 'State Notice';
       case CreditNoticeEvent.name:      return 'Ownership Transfer';
       case DebitNoticeEvent.name:       return 'Debit Notice';
       case SetNameNoticeEvent.name:     return 'Set ANT Name';
       case SetDescriptionNoticeEvent.name: return 'Set ANT Description';
       case SetTickerNoticeEvent.name:   return 'Set ANT Ticker';
+      case ReassignNameEvent.name: return 'ANT Process Change';
       default:                          return 'Unknown Event';
     }
   }
@@ -48,6 +51,7 @@ import {
       case SetNameNoticeEvent.name:     return 'ant-name-set  ';
       case SetDescriptionNoticeEvent.name: return 'ant-description-set';
       case SetTickerNoticeEvent.name:   return 'ant-ticker-set';
+      case ReassignNameEvent.name: return 'ant-reassign-event';
       default:                          return 'multiple-changes';
     }
   }
