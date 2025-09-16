@@ -382,6 +382,7 @@ export default function History() {
 
   if (antLoading || loading) return <LoadingScreen />;
 
+
   if (!antLoading && (antError || !antDetail)) {
     return (
       <div className="history">

@@ -177,3 +177,50 @@
   border-color: rgba(132,233,228,0.45);
   background: rgba(132,233,228,0.10);
 }
+
+/* --- Suggestions header + powered-by caption --- */
+.suggestions-wrap {
+  margin-top: 1rem;
+}
+
+.suggestions-heading {
+  font-size: .95rem;
+  color: #c9cbd3;
+  margin-bottom: .5rem;
+  letter-spacing: .02em;
+  font-weight: 600;
+}
+
+/* Slightly stylized caption; small, airy, tasteful */
+.powered-by {
+  margin-top: .35rem;
+  font-size: .8rem;
+  color: #9aa0a6;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: .95;
+}
+
+/* --- Chip skeleton shimmer for loading state --- */
+.chip-skeleton {
+  position: relative;
+  width: 110px;               /* visually similar to a short name chip */
+  height: 34px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--chip-border);
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.05) 0%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: chip-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes chip-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: 0 0; }
+}
