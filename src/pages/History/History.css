@@ -236,11 +236,10 @@
   -webkit-backdrop-filter: blur(6px);
 }
 
-.legend-reset:hover {
-  background: rgba(132, 233, 228, 0.15);
-  border-color: var(--accent);
-  color: #fff;
-  box-shadow: 0 0 8px rgba(132, 233, 228, 0.35);
+.legend-reset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
 }
 
 /* ── COLOR MAP (shared with card keys) ── */

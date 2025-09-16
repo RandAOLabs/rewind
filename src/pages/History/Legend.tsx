@@ -21,6 +21,8 @@ const ITEMS: Array<{ key: string; label: string }> = [
 ];
 
 export default function Legend({ activeLegend, onToggle, onReset }: LegendProps) {
+  const canReset = activeLegend.size > 0;
+
   return (
     <div className="legend">
       <h4>Legend</h4>
@@ -41,7 +43,14 @@ export default function Legend({ activeLegend, onToggle, onReset }: LegendProps)
         ))}
 
         <div className="legend-actions">
-          <button type="button" className="legend-reset" onClick={onReset}>
+          <button
+            type="button"
+            className="legend-reset"
+            onClick={onReset}
+            disabled={!canReset}
+            aria-disabled={!canReset}
+            title={canReset ? 'Show all categories' : 'All categories are already shown'}
+          >
             Show All
           </button>
         </div>
