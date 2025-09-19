@@ -1,0 +1,100 @@
+/* src/shared/components/Footer/Footer.css */
+
+/* match your History.css vars */
+:root {
+  --footer-height: 60px;
+}
+
+/* sticky footer */
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--footer-height);
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--text-faded);
+  box-sizing: border-box;
+  padding: 0.5rem 1rem;
+  background: var(--bg);
+  z-index: 1000;
+}
+
+/* flex helpers */
+.flex-row            { display: flex; align-items: center; }
+.flex-left           { justify-content: flex-start; }
+.flex-space-between  { flex: 1;           }
+.flex-right          { justify-content: flex-end; }
+.w-fit               { width: fit-content; }
+
+/* links & buttons */
+.footer-link {
+  color: var(--text-grey);
+  font-size: 0.875rem;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+  transition: color 0.15s;
+}
+.footer-link:hover {
+  color: var(--text-white);
+}
+
+.footer-button {
+  background: none;
+  border: none;
+  color: var(--text-grey);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  transition: color 0.15s;
+}
+.footer-button:hover {
+  color: var(--text-white);
+}
+
+.footer-icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  margin-left: 0.5rem;
+  color: var(--text-grey);
+  transition: color 0.15s;
+}
+
+.footer-icon-button:hover {
+  color: var(--text-white);
+}
+
+.footer-icon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: currentColor;
+}
+
+
+.footer-icon-logo {
+  width: 10rem;
+  margin-left: 0.75rem;
+  margin-bottom: 1rem;
+  height: auto;
+  cursor: pointer; /* makes it feel clickable */
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.footer-icon-logo:hover {
+  transform: scale(1.05); /* slight zoom */
+  opacity: 0.9;           /* subtle fade */
+}
+
+.footer-icon-logo:active {
+  transform: scale(0.95); /* pressed effect */
+  opacity: 0.8;
+}

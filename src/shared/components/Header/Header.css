@@ -1,0 +1,155 @@
+/* src/shared/components/Header/Header.css */
+
+/* Full-width header bar with black base + aurora + glass */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4.5rem;
+  z-index: 1000;
+
+  /* Black remains dominant; glass gradient sits on top for depth */
+  background: #0b0c10;
+  background-image: var(--glass-bg);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+
+  /* Subtle depth and a faint inner line so it reads as a bar */
+  box-shadow: 0 8px 26px rgba(0,0,0,0.35);
+  isolation: isolate; /* contain the aurora pseudo-layer */
+}
+
+/* Aurora wash across the full header width */
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45; /* restrained so it doesn’t overpower */
+  background:
+    radial-gradient(800px 520px at 12% 30%, rgba(60, 91, 188, 0.28), transparent 60%),
+    radial-gradient(680px 520px at 88% 20%, rgba(147, 51, 234, 0.22), transparent 60%),
+    radial-gradient(720px 560px at 50% 85%, rgba(16, 185, 129, 0.18), transparent 60%);
+  filter: blur(10px);
+  z-index: -1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes header-aurora-pan {
+    0%   { transform: translate3d(0,0,0); }
+    100% { transform: translate3d(-10px, 8px, 0); }
+  }
+  .app-header::before {
+    animation: header-aurora-pan 16s ease-in-out infinite alternate;
+  }
+}
+
+/* A faint bottom hairline to seat the bar without heavy borders */
+.app-header::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+  pointer-events: none;
+}
+
+/* Inner container is now layout-only (no background/border/shadow) */
+.header-inner {
+  max-width: 95rem;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Logo */
+.logo-link {
+  display: flex;
+  align-items: center;
+}
+.logo-img {
+  height: 50px;
+  width: auto;
+  display: block;
+}
+
+/* ---- Search (only shown on history pages) ---- */
+
+.header-search {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.header-search-input {
+  width: 240px;
+  height: 1.9rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.95rem;
+
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  color: #e8eaee;
+
+  outline: none;
+  transition: box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.header-search-input::placeholder {
+  color: rgba(229, 231, 235, 0.7);
+}
+
+.header-search-input:focus {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px rgba(132, 233, 228, 0.35),
+    0 6px 18px rgba(0,0,0,0.35) inset;
+  background: rgba(255,255,255,0.07);
+}
+
+.header-search-btn {
+  display: grid;
+  place-items: center;
+
+  height: 1.9rem;
+  padding: 0 0.5rem;
+
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  color: #e8eaee;
+  cursor: pointer;
+
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.header-search-btn:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.16);
+}
+
+.header-search-btn:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 560px) {
+  .header-search-input {
+    width: 180px;
+  }
+}
+
+/* Ensure tokens exist (in case History.css hasn’t loaded yet) */
+:root {
+  --header-height: 60px;
+  --glass-bg: linear-gradient(180deg, rgba(11,12,18,0.55), rgba(11,12,18,0.35));
+  --accent: #84e9e4;
+  --chip-bg: rgba(255,255,255,0.06);
+  --chip-border: rgba(255,255,255,0.10);
+}
