@@ -1,0 +1,28 @@
+import { Suspense } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Analytics, Loading } from './shared/components'
+import { createRoute } from './utils/routing'
+import Home from './pages/Home/Home'
+import Header from './shared/components/Header/Header'
+import Footer from './shared/components/Footer/Footer'
+// Create route with automatic eager loading
+const History = createRoute(() => import('./pages/History/History'))
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Analytics>
+        <Header />
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/history/:arnsname" element={<History />} />
+          </Routes>
+        </Suspense>
+        <Footer />
+      </Analytics>
+    </BrowserRouter>
+  )
+}
+
+export default App

@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --header-height: 60px;
+  --footer-height: 60px;
+
+  font-family: 'Rubik', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Color palette from branding guidelines */
+  --white: #FFFFFF;
+  --black: #000000;
+  
+  /* Greys */
+  --grey-100: #CACAD6;
+  --grey-200: #A3A3AD;
+  --grey-300: #7F7F87;
+  --grey-400: #3B3B45;
+  --grey-500: #303038;
+  --grey-600: #262629;
+  --grey-700: #212124;
+  --grey-800: #1E1E24;
+  --grey-900: #1C1C1F;
+  --grey-950: #0E0E0F;
+  --grey-975: #050505;
+
+  color-scheme: light dark;
+  color: var(--grey-800);
+  background-color: var(--white);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* make your <Header /> truly fixed */
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--header-height);
+  z-index: 1000;
+}
+
+/* make your <Footer /> truly fixed */
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--footer-height);
+  z-index: 1000;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: var(--grey-100);
+    background-color: var(--grey-100);
+  }
+}
+/* make the app fill the viewport */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+/* -------- Global responsive scale -------- */
+:root {
+  --ui-scale: 1;            /* desktop default */
+}
+
+/* when window is "tablet-ish" */
+@media (max-width: 1100px) {
+  :root { --ui-scale: 0.75; }
+}
+
+/* when window is "mobile-ish" */
+@media (max-width: 700px) {
+  :root { --ui-scale: 0.5; }
+}
+
+/* Preferred: scales everything in Chromium/WebKit */
+body { 
+  zoom: var(--ui-scale);
+}
+
+/* Fallback for browsers without zoom (e.g., Firefox) */
+@supports not (zoom: 1) {
+  /* Scale the React root and compensate width/height so it fits viewport */
+  #root {
+    transform: scale(var(--ui-scale));
+    transform-origin: top left;
+    width: calc(100% / var(--ui-scale));
+    height: calc(100% / var(--ui-scale));
+  }
+}
