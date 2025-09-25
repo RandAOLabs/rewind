@@ -24,23 +24,29 @@ export default function Legend({ activeLegend, onToggle, onReset }: LegendProps)
   const canReset = activeLegend.size > 0;
 
   return (
-    <div className="legend">
+    <div className="legend" role="region" aria-label="Event legend and filters">
       <h4>Legend</h4>
       <div className="legend-section">
         <div className="legend-title">Event Legend:</div>
 
-        {ITEMS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            className={`legend-item-btn ${activeLegend.has(key) ? 'active' : ''}`}
-            onClick={() => onToggle(key)}
-            aria-pressed={activeLegend.has(key)}
-          >
-            <span className={`legend-swatch ${key}`} />
-            <span className="legend-label">{label}</span>
-          </button>
-        ))}
+        {ITEMS.map(({ key, label }) => {
+          const isActive = activeLegend.has(key);
+          const isMuted = canReset && !isActive; // when any is selected, gray out the others
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`legend-item-btn ${isActive ? 'active' : ''} ${isMuted ? 'muted' : ''}`}
+              onClick={() => onToggle(key)}
+              aria-pressed={isActive}
+              aria-label={`${label}${isActive ? ' (selected)' : isMuted ? ' (dimmed)' : ''}`}
+              data-legend-key={key}
+            >
+              <span className={`legend-swatch ${key} ${isMuted ? 'muted' : ''}`} />
+              <span className="legend-label">{label}</span>
+            </button>
+          );
+        })}
 
         <div className="legend-actions">
           <button

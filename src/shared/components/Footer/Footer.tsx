@@ -27,19 +27,6 @@ export default function Footer() {
 
       {/* RIGHT */}
       <div className="flex-row flex-right w-fit">
-        <Tooltip
-          title="Show Changelog"
-          placement="top"
-          color="var(--text-faded)"
-        >
-          <button
-            className="footer-button"
-            onClick={() => setShowChangeLog(true)}
-          >
-            {`${"APP_VERSION"}-${"1.0.1"}`}
-          </button>
-        </Tooltip>
-
         <Tooltip title="GitHub" placement="top" color="var(--text-faded)">
           <button
             className="footer-icon-button"
