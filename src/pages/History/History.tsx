@@ -17,6 +17,7 @@ import { EMPTY, firstValueFrom, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
+import { AppError } from '../../errors/appError';
 
 // Extracted components & mappings
 import LoadingScreen from './components/LoadingScreen';
@@ -29,9 +30,9 @@ import { applyDelta, toEpochSeconds, firstDefined } from './utils/data';
 import { buildExtraBox } from './data/extraBoxBuilders';
 import { computeDelta$ } from './data/computeDelta';
 
-// ───────────────────────────────────────────────────────────
-// Async service singleton (local memo; no new files)
-// ───────────────────────────────────────────────────────────
+// Cache
+import { cache } from '../../utils/cache';
+
 let rewindPromise: Promise<any> | null = null;
 async function getRewind() {
   if (!rewindPromise) {
@@ -40,22 +41,40 @@ async function getRewind() {
   return rewindPromise;
 }
 
-// ───────────────────────────────────────────────────────────
-// Loading smoothers
-// ───────────────────────────────────────────────────────────
-const MIN_SPINNER_MS = 400;     // minimum spinner display to avoid flicker
+const MIN_SPINNER_MS = 600;     // minimum spinner display to avoid flicker
 const EMPTY_DEBOUNCE_MS = 700;  // wait before declaring "no history yet"
+
+const TTL_MS = 3600_000; // 1 hour
+const V_DETAIL = 1;
+const V_INIT   = 1;
+const V_HIST   = 2; // excludes extraBox from cache
+
+const SETTLE_MS = 800;
+
+
+const WAIT_UNTIL_COMPLETE = false;
+
+type CachedEvent = Pick<
+  TimelineEvent,
+  'action' | 'actor' | 'legendKey' | 'timestamp' | 'txHash' | 'snapshot'
+>;
+type CachedHistory = { events: CachedEvent[] };
 
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
   const navigate = useNavigate();
+
+  const canonicalName = arnsname.trim().toLowerCase();
+  const keyDetail = cache.key('antDetail', canonicalName, V_DETAIL);
+  const keyInit   = cache.key('initialState', canonicalName, V_INIT);
+  const keyHist   = cache.key('eventHistory', canonicalName, V_HIST);
 
   const [retryToken, setRetryToken] = useState(0);
   const doRetry = () => setRetryToken(t => t + 1);
 
   const [events, setEvents]       = useState<TimelineEvent[]>([]);
   const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError]         = useState<AppError | null>(null);
 
   // snapshots aligned 1:1 with events as they are built globally
   const [snapshots, setSnapshots] = useState<AntSnapshot[]>([]);
@@ -67,7 +86,7 @@ export default function History() {
   // ANT detail state
   const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
-  const [antError, setAntError]       = useState<string | null>(null);
+  const [antError, setAntError]       = useState<AppError | null>(null);
 
   // holobar cursor focus (kept in sync with both card clicks and holobar scrubs)
   const [holoFocusTx, setHoloFocusTx] = useState<string | null>(null);
@@ -96,10 +115,112 @@ export default function History() {
     }
   };
 
-  // NEW: cache initial mainnet state once (normalize name to avoid misses)
+  // initial mainnet state (used while assembling)
   const [initialMainnetState, setInitialMainnetState] = useState<any | null>(null);
+
+  // Track whether we have warm cache (to skip background refresh)
+  const warmDetailRef = useRef(false);
+  const warmInitRef   = useRef(false);
+  const warmHistRef   = useRef(false);
+
+  // ───────────────────────────────────────────────────────────
+  // PRIME FROM CACHE on name change (ANT detail, initial state, event history)
+  // ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    // ANT detail
+    const cachedDetail = cache.get<ARNameDetail>(keyDetail, TTL_MS);
+    warmDetailRef.current = Boolean(cachedDetail);
+    if (cachedDetail) {
+      setAntDetail(cachedDetail);
+      setAntLoading(false);
+    } else {
+      setAntDetail(null);
+      setAntLoading(true);
+    }
+
+    // Initial state
+    const cachedInit = cache.get<any>(keyInit, TTL_MS);
+    warmInitRef.current = Boolean(cachedInit);
+    setInitialMainnetState(cachedInit ?? null);
+
+    // History (assembled UI) — REHYDRATE and rebuild extraBox
+    const cachedHist = cache.get<CachedHistory>(keyHist, TTL_MS);
+    warmHistRef.current = Boolean(cachedHist?.events?.length);
+    if (cachedHist?.events?.length) {
+      const rehydrated: TimelineEvent[] = cachedHist.events.map((ev) => {
+        const full: TimelineEvent = {
+          ...ev,
+          rawEvent: {} as IARNSEvent, // non-serializable; dummy for type
+        };
+        // IMPORTANT: rebuild extraBox, do not read from cache
+        full.extraBox = buildExtraBox(full);
+        return full;
+      });
+      setEvents(rehydrated);
+      setSnapshots(rehydrated.map(e => e.snapshot));
+      setLoading(false); // page renders instantly
+      receivedAnyRef.current = true;
+    } else {
+      // cold start for history
+      setEvents([]);
+      setSnapshots([]);
+      setLoading(true);
+      receivedAnyRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canonicalName]);
+
+  // ───────────────────────────────────────────────────────────
+  // ANT DETAIL fetch — skip on warm cache unless user retries
+  // ───────────────────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
+    startedAtRef.current.ant = Date.now();
+    setAntError(null);
+
+    const shouldSkip = warmDetailRef.current && retryToken === 0;
+    if (shouldSkip) {
+      endAntLoadingSmoothly();
+      return () => {
+        alive = false;
+        if (timersRef.current.ant) clearTimeout(timersRef.current.ant);
+      };
+    }
+
+    (async () => {
+      try {
+        const service = await getRewind();
+        const detail = await service.getAntDetail(arnsname);
+        if (!alive) return;
+        setAntDetail(detail);
+        cache.set(keyDetail, detail);
+      } catch (err: any) {
+        if (!alive) return;
+        if (!cache.get<ARNameDetail>(keyDetail, TTL_MS)) {
+          setAntError(err?.message || 'Failed to load ANT details');
+        }
+      } finally {
+        if (alive) endAntLoadingSmoothly();
+      }
+    })();
+
+    return () => {
+      alive = false;
+      if (timersRef.current.ant) clearTimeout(timersRef.current.ant);
+    };
+  }, [arnsname, retryToken, keyDetail]);
+
+  // ───────────────────────────────────────────────────────────
+  // INITIAL MAINNET STATE fetch — skip on warm cache unless retry
+  // ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    let alive = true;
+
+    const shouldSkip = warmInitRef.current && retryToken === 0;
+    if (shouldSkip) {
+      return () => { alive = false; };
+    }
+
     (async () => {
       try {
         const service = await getRewind();
@@ -107,14 +228,20 @@ export default function History() {
         const ims = service.getMainnetInitialState
           ? service.getMainnetInitialState(canonical)
           : undefined;
-        if (alive) setInitialMainnetState(ims ?? null);
+
+        if (!alive) return;
+        const next = ims ?? null;
+        setInitialMainnetState(next);
+        cache.set(keyInit, next);
       } catch (e) {
         console.warn('[History] getMainnetInitialState failed:', e);
-        if (alive) setInitialMainnetState(null);
+        if (!alive) return;
+        setInitialMainnetState(prev => prev ?? null);
       }
     })();
+
     return () => { alive = false; };
-  }, [arnsname]);
+  }, [arnsname, keyInit, retryToken]);
 
   // Refs for pan/zoom and each card
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -136,6 +263,7 @@ export default function History() {
       setSelectedEvent(null);
       return;
     }
+    // NOTE: cached rehydrated events have a dummy rawEvent; EventDetails should still handle gracefully
     const idx = events.findIndex(e => e.txHash === evt.txHash);
     const snap = idx >= 0 ? snapshots[idx] : undefined;
     setSelectedEvent(snap ? { ...evt, snapshot: snap } : evt);
@@ -146,52 +274,173 @@ export default function History() {
     if (selectedEvent?.txHash) setHoloFocusTx(selectedEvent.txHash);
   }, [selectedEvent?.txHash]);
 
-  // fetch ANT detail
-  useEffect(() => {
-    let alive = true;
-    startedAtRef.current.ant = Date.now();
-    setAntLoading(true);
-    setAntError(null);
-
-    (async () => {
-      try {
-        const service = await getRewind();
-        const detail = await service.getAntDetail(arnsname);
-        if (alive) setAntDetail(detail);
-      } catch (err: any) {
-        if (alive) setAntError(err?.message || 'Failed to load ANT details');
-      } finally {
-        if (alive) endAntLoadingSmoothly();
-      }
-    })();
-
-    return () => {
-      alive = false;
-      if (timersRef.current.ant) clearTimeout(timersRef.current.ant);
-    };
-  }, [arnsname, retryToken]);
-
-  // Chronological, deterministic rebuild
+  // ───────────────────────────────────────────────────────────
+  // HISTORY REBUILD (stream) with QUIET-PERIOD BUFFER
+  // Skips entirely on warm cache unless retry. Otherwise, coalesce updates
+  // and paint once per "settle" instead of per chunk.
+  // ───────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     let sub: Subscription | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let streamCompleted = false;
 
-    // reset UI state
-    setEvents([]);
-    setSnapshots([]);
+    type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
+    const byTx = new Map<string, Item>();
+    let ordCounter = 0;
+
+    const clearSettle = () => {
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = null;
+      }
+    };
+
+    // Build UI from current byTx state (sorted), then set state + cache
+    const buildAndApply = async () => {
+      // Sort
+      const all = Array.from(byTx.values()).sort((a, b) => {
+        const at = a.ts || 0, bt = b.ts || 0;
+        return at !== bt ? at - bt : a.ord - b.ord;
+      });
+
+      // Assemble
+      let snap = initialSnapshot;
+      const ui: TimelineEvent[] = [];
+      const snaps: AntSnapshot[] = [];
+
+      for (const { e, ts, tx } of all) {
+        const [actor, delta] = await Promise.all([
+          Promise.resolve(e.getInitiator?.()),
+          firstValueFrom(computeDelta$(e)),
+        ]);
+        snap = applyDelta(snap, delta);
+
+        const cls = e.constructor?.name ?? 'Unknown';
+        const action = classToAction(cls);
+        const legendKey = classToLegend(cls);
+
+        const uiEvt: TimelineEvent = {
+          action,
+          actor: actor ?? '',
+          legendKey,
+          timestamp: ts ?? 0,
+          txHash: tx,
+          rawEvent: e,
+          snapshot: snap,
+        };
+        uiEvt.extraBox = buildExtraBox(uiEvt);
+
+        ui.push(uiEvt);
+        snaps.push(snap);
+      }
+
+      // Inject Initial Mainnet State (if present)
+      try {
+        const ims = initialMainnetState;
+        if (ims) {
+          const [
+            processId,
+            purchasePriceCA,
+            type,
+            startTime,
+            endTime,
+            undernameLimit,
+          ] = await Promise.all([
+            Promise.resolve(ims.getProcessId?.()),
+            Promise.resolve(ims.getPurchasePrice?.()),
+            Promise.resolve(ims.getType?.()),
+            Promise.resolve(ims.getStartTime?.()),
+            Promise.resolve(ims.getEndTime?.()),
+            Promise.resolve(ims.getUndernameLimit?.()),
+          ]);
+
+          const initialSnap: AntSnapshot = {
+            ...initialSnapshot,
+            processId: processId ?? '',
+            purchasePrice: purchasePriceCA?.toString?.() ?? String(purchasePriceCA ?? ''),
+            startTime: toEpochSeconds(startTime) * 1000,
+            expiryTs:  toEpochSeconds(endTime)   * 1000,
+            undernameLimit,
+            description: type ? String(type) : undefined,
+          };
+
+          const tsCandidate = ims.getEventTimeStamp?.();
+          const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
+
+          const initEvt: TimelineEvent = {
+            action: 'Initial Mainnet State',
+            actor: '',
+            legendKey: 'initial-mainnet-state',
+            timestamp: tsSec,
+            txHash: `initial:${arnsname}`,
+            rawEvent: {} as IARNSEvent,
+            snapshot: initialSnap,
+          };
+          initEvt.extraBox = buildExtraBox(initEvt);
+
+          ui.unshift(initEvt);
+          snaps.unshift(initialSnap);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      // Write-through cache (serializable subset only)
+      const toCache: CachedHistory = {
+        events: ui.map((e) => ({
+          action: e.action,
+          actor: e.actor,
+          legendKey: e.legendKey,
+          timestamp: e.timestamp,
+          txHash: e.txHash,
+          snapshot: e.snapshot,
+        })),
+      };
+      cache.set(keyHist, toCache);
+
+      // Apply to UI
+      if (!cancelled) {
+        receivedAnyRef.current = true;
+        if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
+        setEvents(ui);
+        setSnapshots(snaps);
+        endHistoryLoadingSmoothly();
+      }
+    };
+
+    const scheduleSettle = () => {
+      clearSettle();
+      if (WAIT_UNTIL_COMPLETE && !streamCompleted) {
+        // Do nothing; we'll paint at `complete` only.
+        return;
+      }
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        // Fire and forget; errors are handled upstream
+        void buildAndApply();
+      }, SETTLE_MS);
+    };
+
+    const shouldSkip = warmHistRef.current && retryToken === 0;
+    if (shouldSkip) {
+      // Already showing cached events; no stream fetch for up to an hour.
+      return () => {
+        if (sub) sub.unsubscribe();
+        clearSettle();
+      };
+    }
+
+    // Cold or retry path: fetch as usual (but coalesce UI updates)
     startedAtRef.current.history = Date.now();
-    setLoading(true);
     setError(null);
-    setSelectedEvent(null);
-    receivedAnyRef.current = false;
-    if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
+    if (timersRef.current.empty) {
+      clearTimeout(timersRef.current.empty!);
+      timersRef.current.empty = undefined;
+    }
 
     (async () => {
       try {
-        type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
-        const byTx = new Map<string, Item>();
-        let ordCounter = 0;
-
         const service = await getRewind();
         if (cancelled) return;
 
@@ -205,7 +454,6 @@ export default function History() {
           )
           .subscribe({
             next: async (raw: IARNSEvent[]) => {
-              // build batch with safe awaits
               const batch = await Promise.all(
                 (raw ?? []).map(async (e, idx) => {
                   const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
@@ -230,112 +478,17 @@ export default function History() {
                 }
               }
 
-              const all = Array.from(byTx.values()).sort((a, b) => {
-                const at = a.ts || 0, bt = b.ts || 0;
-                return at !== bt ? at - bt : a.ord - b.ord;
-              });
-
-              let snap = initialSnapshot;
-              const ui: TimelineEvent[] = [];
-              const snaps: AntSnapshot[] = [];
-
-              for (const { e, ts, tx } of all) {
-                console.log(e);
-                const [actor, delta] = await Promise.all([
-                  Promise.resolve(e.getInitiator?.()),
-                  firstValueFrom(computeDelta$(e)),
-                ]);
-
-                snap = applyDelta(snap, delta);
-
-                const cls = e.constructor?.name ?? 'Unknown';
-                const action = classToAction(cls);
-                const legendKey = classToLegend(cls);
-
-                const uiEvt: TimelineEvent = {
-                  action,
-                  actor: actor ?? '',
-                  legendKey,
-                  timestamp: ts ?? 0,
-                  txHash: tx,
-                  rawEvent: e,
-                  snapshot: snap,
-                };
-                uiEvt.extraBox = buildExtraBox(uiEvt);
-
-                ui.push(uiEvt);
-                snaps.push(snap);
-              }
-
-              // Inject Initial Mainnet State (if present)
-              try {
-                const ims = initialMainnetState;
-                if (ims) {
-                  const [
-                    processId,
-                    purchasePriceCA,
-                    type,
-                    startTime,
-                    endTime,
-                    undernameLimit,
-                  ] = await Promise.all([
-                    Promise.resolve(ims.getProcessId?.()),
-                    Promise.resolve(ims.getPurchasePrice?.()),
-                    Promise.resolve(ims.getType?.()),
-                    Promise.resolve(ims.getStartTime?.()),
-                    Promise.resolve(ims.getEndTime?.()),
-                    Promise.resolve(ims.getUndernameLimit?.()),
-                  ]);
-
-                  const initialSnap: AntSnapshot = {
-                    ...initialSnapshot,
-                    processId: processId ?? '',
-                    purchasePrice: purchasePriceCA?.toString?.() ?? String(purchasePriceCA ?? ''),
-                    startTime: toEpochSeconds(startTime) * 1000,
-                    expiryTs:  toEpochSeconds(endTime)   * 1000,
-                    undernameLimit,
-                    description: type ? String(type) : undefined,
-                  };
-
-                  const tsCandidate = ims.getEventTimeStamp?.();
-                  const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
-
-                  const initEvt: TimelineEvent = {
-                    action: 'Initial Mainnet State',
-                    actor: '',
-                    legendKey: 'initial-mainnet-state',
-                    timestamp: tsSec,
-                    txHash: `initial:${arnsname}`,
-                    rawEvent: {} as IARNSEvent,
-                    snapshot: initialSnap,
-                  };
-                  initEvt.extraBox = buildExtraBox(initEvt);
-
-                  ui.unshift(initEvt);
-                  snaps.unshift(initialSnap);
-                }
-              } catch (e) {
-                // non-fatal
-              }
-
-              // Decide when to end loading:
-              if (!cancelled) {
-                if (ui.length > 0) {
-                  receivedAnyRef.current = true;
-                  if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
-                  setEvents(ui);
-                  setSnapshots(snaps);
-                  endHistoryLoadingSmoothly();
-                } else if (!receivedAnyRef.current && !timersRef.current.empty) {
-                  // debounce empty before showing "no history"
-                  timersRef.current.empty = setTimeout(() => {
-                    if (!receivedAnyRef.current && !cancelled) {
-                      setEvents([]);
-                      setSnapshots([]);
-                      endHistoryLoadingSmoothly();
-                    }
-                  }, EMPTY_DEBOUNCE_MS);
-                }
+              // Instead of painting immediately, wait for quiet period.
+              scheduleSettle();
+            },
+            complete: () => {
+              streamCompleted = true;
+              if (WAIT_UNTIL_COMPLETE) {
+                // Paint once at the end.
+                void buildAndApply();
+              } else {
+                // If nothing is scheduled, ensure we paint once more on completion.
+                if (!settleTimer) void buildAndApply();
               }
             },
             error: (err: any) => {
@@ -356,10 +509,11 @@ export default function History() {
     return () => {
       cancelled = true;
       if (sub) sub.unsubscribe();
+      clearSettle();
       if (timersRef.current.history) clearTimeout(timersRef.current.history);
       if (timersRef.current.empty) clearTimeout(timersRef.current.empty);
     };
-  }, [arnsname, retryToken, initialMainnetState]);
+  }, [arnsname, retryToken, initialMainnetState, keyHist]);
 
   // After selection paints, pan/zoom to it
   useLayoutEffect(() => {
@@ -383,30 +537,36 @@ export default function History() {
 
   if (antLoading || loading) return <LoadingScreen />;
 
-
   if (!antLoading && (antError || !antDetail)) {
     return (
       <div className="history">
         <FailureView
           title="Couldn’t load ANT details"
-          message={antError || 'The name may not exist, or the gateway is unavailable.'}
+          error={antError ?? { code: 'NOT_FOUND', message: 'The name may not exist, or the gateway is unavailable.', where: 'ant' }}
+          context={{ arnsname }}
           onRetry={doRetry}
           onHome={() => navigate('/')}
         />
       </div>
     );
   }
-
+  
   if (error || events.length < 1) {
     return (
       <div className="history">
         <FailureView
           title={error ? 'Couldn’t load history' : 'No history yet'}
+          error={error ?? null}
           message={
             error
-              ? error
+              ? undefined
               : 'We couldn’t find any events for this name. Try another name or retry.'
           }
+          context={{
+            arnsname,
+            gotInitial: Boolean(initialMainnetState),
+            receivedAny: receivedAnyRef.current,
+          }}
           onRetry={doRetry}
           onHome={() => navigate('/')}
         />
@@ -416,9 +576,6 @@ export default function History() {
 
   const uniqueMap = new Map<string, TimelineEvent>();
   events.forEach(evt => {
-    console.log(evt);
-    // console.log(evt.txHash);
-    // console.log(JSON.stringify(evt));
     if (!uniqueMap.has(evt.txHash)) uniqueMap.set(evt.txHash, evt);
   });
 
@@ -453,7 +610,7 @@ export default function History() {
   // Update these to your real legend keys if you have exact values in classToLegend
   const BUY_NAME_KEYS = ['buy-name-notice', 'buynamenotice'];
 
-  // NEW: ownership transfer keys (tweak to your exact legendKey values if you have them)
+  // ownership transfer keys (tweak to your exact legendKey values if needed)
   const TRANSFER_KEYS = ['ownership-transfer', 'owner-set', 'owner-changed'];
 
   // helpers
@@ -489,8 +646,8 @@ export default function History() {
     ? [rest[buyIdx], ...rest.slice(0, buyIdx), ...rest.slice(buyIdx + 1)]
     : rest;
 
-  // 3.5) NEW: If BuyNameNotice exists, move the FIRST same-day Ownership Transfer
-  //       to be immediately after it.
+  // 3.5) If BuyNameNotice exists, move FIRST same-day Ownership Transfer
+  //      to immediately after it.
   if (buyIdx >= 0 && restOrdered.length > 1) {
     const buyEvent = restOrdered[0]; // we just pinned it
     const buyDay = dayKey(buyEvent.timestamp);
@@ -499,7 +656,6 @@ export default function History() {
       (e, i) => i > 0 && isOwnershipTransfer(e) && dayKey(e.timestamp) === buyDay
     );
 
-    // if found and not already directly after the buy, move it to index 1
     if (sameDayTransferIdx > 1) {
       const [transferEvt] = restOrdered.splice(sameDayTransferIdx, 1);
       restOrdered.splice(1, 0, transferEvt);
