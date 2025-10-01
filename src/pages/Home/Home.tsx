@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import FeelingLuckyButton, { getRandomArNSName } from './components/FeelingLuckyButton';
 import './Home.css';
 import Footer from '../../shared/components/Footer/Footer';
+// import SEO from '../../shared/components/SEO';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -48,6 +49,11 @@ export default function Home() {
 
   return (
     <div className="home">
+      {/* <SEO
+        title="Rewind"
+        description="Explore ArNS history and details on Rewind."
+        image="/REWIND_WHITE_LOGO.png"
+      /> */}
       <div className="home-aurora" aria-hidden="true" />
 
       <main className="hero">

@@ -32,6 +32,7 @@ import { computeDelta$ } from './data/computeDelta';
 
 // Cache
 import { cache } from '../../utils/cache';
+// import SEO from '@/shared/components/SEO';
 
 let rewindPromise: Promise<any> | null = null;
 async function getRewind() {
@@ -314,6 +315,7 @@ export default function History() {
           Promise.resolve(e.getInitiator?.()),
           firstValueFrom(computeDelta$(e)),
         ]);
+        
         snap = applyDelta(snap, delta);
 
         const cls = e.constructor?.name ?? 'Unknown';
@@ -456,6 +458,7 @@ export default function History() {
             next: async (raw: IARNSEvent[]) => {
               const batch = await Promise.all(
                 (raw ?? []).map(async (e, idx) => {
+                  console.log(Promise.resolve(e));
                   const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
                   const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
                   const ts = Number.isFinite(tsNum) ? tsNum : 0;
@@ -537,23 +540,28 @@ export default function History() {
 
   if (antLoading || loading) return <LoadingScreen />;
 
-  if (!antLoading && (antError || !antDetail)) {
-    return (
-      <div className="history">
-        <FailureView
-          title="Couldn’t load ANT details"
-          error={antError ?? { code: 'NOT_FOUND', message: 'The name may not exist, or the gateway is unavailable.', where: 'ant' }}
-          context={{ arnsname }}
-          onRetry={doRetry}
-          onHome={() => navigate('/')}
-        />
-      </div>
-    );
-  }
+  // if (!antLoading && (antError || !antDetail)) {
+  //   return (
+  //     <div className="history">
+  //       <FailureView
+  //         title="Couldn’t load ANT details"
+  //         error={antError ?? { code: 'NOT_FOUND', message: 'The name may not exist, or the gateway is unavailable.', where: 'ant' }}
+  //         context={{ arnsname }}
+  //         onRetry={doRetry}
+  //         onHome={() => navigate('/')}
+  //       />
+  //     </div>
+  //   );
+  // }
   
   if (error || events.length < 1) {
     return (
       <div className="history">
+        {/* <SEO
+          title={`${antDetail?.name ?? "Rewind"} — History`}
+          description={`History view for ${antDetail?.name ?? "this ArNS name"} on Rewind.`}
+          image="/REWIND_WHITE_LOGO.png"
+        /> */}
         <FailureView
           title={error ? 'Couldn’t load history' : 'No history yet'}
           error={error ?? null}
@@ -582,7 +590,6 @@ export default function History() {
   const excludedActions = [
     'Credit Notice',
     'Debit Notice',
-    'Returned ANT Name',
     'RecordEvent',
     'State Notice',
     'Unknown Event'

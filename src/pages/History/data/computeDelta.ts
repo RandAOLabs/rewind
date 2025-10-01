@@ -21,6 +21,7 @@ import {
   import { toObs, stripUndef, sanitizeDelta, firstDefined } from '../utils/data';
   
   export function computeDelta$(ev: IARNSEvent): Observable<SnapshotDelta> {
+    console.log(ev);
     switch (ev.constructor.name) {
       case StateNoticeEvent.name: {
         const e = ev as StateNoticeEvent;

@@ -1,5 +1,6 @@
 import { Wayfinder, NetworkGatewaysProvider } from '@ar.io/wayfinder-core'
 import { ARIO } from '@ar.io/sdk/web'
+import { FastestPingRoutingStrategy } from '@ar.io/wayfinder-core'
 
 const wayfinder = new Wayfinder({
   gatewaysProvider: new NetworkGatewaysProvider({
@@ -7,7 +8,18 @@ const wayfinder = new Wayfinder({
     sortBy: 'operatorStake',
     sortOrder: 'desc',
     limit: 10,
-  })
+  }),
+
+  routingSettings: {
+    strategy: new FastestPingRoutingStrategy({
+      timeoutMs: 500,
+    }),
+    events: {
+      onRoutingSucceeded: (event) => {
+        console.log('Selected gateway:', event.selectedGateway)
+      },
+    },
+  },
 })
 
 export async function arTxidToHttps(txid: string): Promise<string> {
