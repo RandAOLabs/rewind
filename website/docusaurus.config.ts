@@ -2,38 +2,22 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-// This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
-
 const config: Config = {
   title: 'Rewind',
   tagline: 'Explore ArNS history',
   favicon: 'img/REWIND_BLACK_LOGO.png',
 
-  // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
-  future: {
-    v4: true, // Improve compatibility with the upcoming Docusaurus v4
-  },
+  future: { v4: true },
 
-  // Set the production url of your site here
-  url: 'https://rewind.arweave.dev',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/',
+  url: 'https://rewind.ar.io',
+  baseUrl: '/docs/',
 
-  // GitHub pages deployment config.
-  // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'facebook', // Usually your GitHub org/user name.
-  projectName: 'rewind', // Usually your repo name.
+  organizationName: 'facebook',
+  projectName: 'rewind',
 
   onBrokenLinks: 'throw',
 
-  // Even if you don't use internationalization, you can use this field to set
-  // useful metadata like html lang. For example, if your site is Chinese, you
-  // may want to replace "en" with "zh-Hans".
-  i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
-  },
+  i18n: { defaultLocale: 'en', locales: ['en'] },
 
   presets: [
     [
@@ -41,87 +25,46 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          /** ✅ Make docs live at the root of this site (which is mounted at /docs/) */
+          routeBasePath: '/',                // <-- key line
         },
-        blog: {
-          showReadingTime: true,
-          feedOptions: {
-            type: ['rss', 'atom'],
-            xslt: true,
-          },
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
-          // Useful options to enforce blogging best practices
-          onInlineTags: 'warn',
-          onInlineAuthors: 'warn',
-          onUntruncatedBlogPosts: 'warn',
-        },
-        theme: {
-          customCss: './src/css/custom.css',
-        },
+        /** ✅ Disable blog entirely */
+        blog: false,                         // <-- turned off
+        /** ✅ Disable custom “pages” so the template homepage disappears */
+        pages: false,                        // <-- turned off
+        theme: { customCss: './src/css/custom.css' },
       } satisfies Preset.Options,
     ],
   ],
 
   themeConfig: {
-    // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
-    colorMode: {
-      respectPrefersColorScheme: true,
-    },
+    colorMode: { respectPrefersColorScheme: true },
     navbar: {
       title: 'Rewind',
-      logo: {
-        alt: 'Rewind Logo',
-        src: 'img/REWIND_BLACK_LOGO.png',
-      },
+      logo: { alt: 'Rewind Logo', src: 'img/REWIND_BLACK_LOGO.png' },
       items: [
-        { to: '/', label: 'Back to App', position: 'left' },        // your app root
+        { to: '/', label: 'Back to App', position: 'left' },
         { type: 'doc', docId: 'intro', label: 'Docs', position: 'left' },
-        { href: 'https://github.com/yourorg/yourrepo', label: 'GitHub', position: 'right' }
-      ]
+        { href: 'https://github.com/yourorg/yourrepo', label: 'GitHub', position: 'right' },
+      ],
     },
     footer: {
       style: 'dark',
       links: [
-        {
-          title: 'Docs',
-          items: [
-            {
-              label: 'Rewind',
-              to: '/docs/',
-            },
-          ],
-        },
+        { title: 'Docs', items: [{ label: 'Rewind', to: '/docs/' }] },
         {
           title: 'Community',
           items: [
-            {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-            },
-            {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
-            },
-            {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
-            },
+            { label: 'Stack Overflow', href: 'https://stackoverflow.com/questions/tagged/docusaurus' },
+            { label: 'Discord', href: 'https://discordapp.com/invite/docusaurus' },
+            { label: 'X', href: 'https://x.com/docusaurus' },
           ],
-        }
+        },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} Rewind. Built with Docusaurus.`,
     },
-    prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
-    },
+    prism: { theme: prismThemes.github, darkTheme: prismThemes.dracula },
   } satisfies Preset.ThemeConfig,
 };
 
