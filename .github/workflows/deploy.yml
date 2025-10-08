@@ -44,28 +44,28 @@ jobs:
 
       # Default deployment configuration:
       # This requires DEPLOY_UNDERNAME to be set, ensuring deployments always use an undername
-      - name: Deploy with undername (default)
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-          DEPLOY_UNDERNAME: docs
-        run: |
-          if [ -z "$DEPLOY_UNDERNAME" ]; then
-            echo "Error: DEPLOY_UNDERNAME variable is required but not set"
-            echo "Please set the DEPLOY_UNDERNAME variable in your repository settings"
-            echo "If you want to deploy without an undername, use the alternative configuration below"
-            exit 1
-          fi
-          echo "Deploying with undername: docs"
-          npm run deploy
+      # - name: Deploy with undername (default)
+      #   env:
+      #     DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+      #     DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
+      #     DEPLOY_UNDERNAME: ${{ vars.DEPLOY_UNDERNAME }}
+      #   run: |
+      #     if [ -z "$DEPLOY_UNDERNAME" ]; then
+      #       echo "Error: DEPLOY_UNDERNAME variable is required but not set"
+      #       echo "Please set the DEPLOY_UNDERNAME variable in your repository settings"
+      #       echo "If you want to deploy without an undername, use the alternative configuration below"
+      #       exit 1
+      #     fi
+      #     echo "Deploying with undername: $DEPLOY_UNDERNAME"
+      #     npm run deploy-undername
 
       # Alternative deployment configuration (commented out):
       # Use this if you want to deploy directly to the base ArNS without an undername
       # To use this, comment out the above "Deploy with undername" step and uncomment this one
-      # - name: Deploy without undername
-      #   env:
-      #    DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-      #    DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-      #   run: |
-      #    echo "Deploying without undername to base ArNS"
-      #    npm run deploy
+      - name: Deploy without undername
+        env:
+         DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+         DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
+        run: |
+         echo "Deploying without undername to base ArNS"
+         npm run deploy
