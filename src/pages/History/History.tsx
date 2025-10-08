@@ -34,14 +34,6 @@ import { computeDelta$ } from './data/computeDelta';
 import { cache } from '../../utils/cache';
 // import SEO from '@/shared/components/SEO';
 
-/* ────────────────────────────────────────────────────────────
-   DEBUG SWITCH
-   Toggle to silence logs if needed.
-   You can also set localStorage.rewindDebugHistory = '1' to force logging.
-   ──────────────────────────────────────────────────────────── */
-const DEBUG_HISTORY =
-  (typeof window !== 'undefined' && window.localStorage?.getItem('rewindDebugHistory') === '1') || true;
-
 let rewindPromise: Promise<any> | null = null;
 async function getRewind() {
   if (!rewindPromise) {
@@ -59,7 +51,6 @@ const V_INIT   = 1;
 const V_HIST   = 2; // excludes extraBox from cache
 
 const SETTLE_MS = 800;
-
 const WAIT_UNTIL_COMPLETE = false;
 
 type CachedEvent = Pick<
@@ -71,8 +62,6 @@ type CachedHistory = { events: CachedEvent[] };
 /* ────────────────────────────────────────────────────────────
    Helpers
    ──────────────────────────────────────────────────────────── */
-
-/** Treat any of these as “meaningful” so IMS card is worth showing */
 function isMeaningfulInitialSnapshot(s: AntSnapshot | null | undefined): boolean {
   if (!s) return false;
   return Boolean(
@@ -185,11 +174,6 @@ export default function History() {
     // History (assembled UI) — REHYDRATE and rebuild extraBox
     const cachedHist = cache.get<CachedHistory>(keyHist, TTL_MS);
     warmHistRef.current = Boolean(cachedHist?.events?.length);
-    warmDetailRef.current = false;
-    warmInitRef.current = false;
-    warmHistRef.current = false;
-    
-
     if (cachedHist?.events?.length) {
       const rehydrated: TimelineEvent[] = cachedHist.events.map((ev) => {
         const full: TimelineEvent = {
@@ -241,7 +225,7 @@ export default function History() {
       } catch (err: any) {
         if (!alive) return;
         if (!cache.get<ARNameDetail>(keyDetail, TTL_MS)) {
-          if (DEBUG_HISTORY) console.warn('[History] ANT detail failed:', err?.message);
+          // swallow to avoid double error screens when history still renders
         }
       } finally {
         if (alive) endAntLoadingSmoothly();
@@ -331,30 +315,19 @@ export default function History() {
     const byTx = new Map<string, Item>();
     let ordCounter = 0;
 
+    // DEBUG counters
+    let dbgRawFromStream = 0;
+    let dbgDedupedCount = 0;
+    let dbgRenderedBeforeCollapse = 0;
+    let dbgCollapsedTransfers = 0;
+    let dbgSkippedNoChange = 0;
+
     const clearSettle = () => {
       if (settleTimer) {
         clearTimeout(settleTimer);
         settleTimer = null;
       }
     };
-
-    // Metrics for debug
-    let totalRaw = 0;
-    let dedupCount = 0;
-    let renderedCount = 0;
-    let skippedTransfers = 0;
-    let imsConsidered = false;
-    let imsRendered = false;
-
-    const ownershipAudit: Array<{
-      tx: string;
-      action: string;
-      legendKey: string;
-      ts: number;
-      prevOwner: string;
-      nextOwner: string;
-      decision: 'kept' | 'skipped';
-    }> = [];
 
     // Build UI from current byTx state (sorted), then set state + cache
     const buildAndApply = async () => {
@@ -370,14 +343,14 @@ export default function History() {
       const snaps: AntSnapshot[] = [];
 
       for (const { e, ts, tx } of all) {
-        // capture the snapshot BEFORE applying the current delta
+        // snapshot BEFORE
         const prevSnap = snap;
 
         const [actor, delta] = await Promise.all([
           Promise.resolve(e.getInitiator?.()),
           firstValueFrom(computeDelta$(e)),
         ]);
-        
+
         // compute next snapshot
         const nextSnap = applyDelta(prevSnap, delta);
 
@@ -385,28 +358,13 @@ export default function History() {
         const action = classToAction(cls);
         const legendKey = classToLegend(cls);
 
-        /* ── NEW RULE #2: hide ownership transfers that don't change owner ── */
+        // NEW RULE: skip ownership transfers that don't change owner
         if (looksLikeOwnershipChange(action, legendKey)) {
           const prevOwner = String(prevSnap.owner ?? '');
           const nextOwner = String(nextSnap.owner ?? '');
-          const noChange = prevOwner === nextOwner || !nextOwner;
-
-          if (DEBUG_HISTORY) {
-            ownershipAudit.push({
-              tx,
-              action,
-              legendKey,
-              ts,
-              prevOwner,
-              nextOwner,
-              decision: noChange ? 'skipped' : 'kept',
-            });
-          }
-
-          if (noChange) {
-            // advance state but DO NOT add a card
-            snap = nextSnap;
-            skippedTransfers++;
+          if (prevOwner === nextOwner || !nextOwner) {
+            dbgSkippedNoChange++;
+            snap = nextSnap; // advance state, but no card
             continue;
           }
         }
@@ -430,11 +388,10 @@ export default function History() {
       }
 
       // Inject Initial Mainnet State (if present AND meaningful)
+      let imsRendered = false;
       try {
         const ims = initialMainnetState;
         if (ims) {
-          imsConsidered = true;
-
           const [
             processId,
             purchasePriceCA,
@@ -465,12 +422,11 @@ export default function History() {
           const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
 
           const meaningful = isMeaningfulInitialSnapshot(initialSnap);
-          if (DEBUG_HISTORY) {
-            console.groupCollapsed(`[History DEBUG] IMS decision for ${arnsname}`);
-            console.log('initialSnap:', initialSnap);
-            console.log('tsSec:', tsSec, 'meaningful:', meaningful);
-            console.groupEnd();
-          }
+          console.debug('[History DEBUG] IMS snapshot', {
+            tsSec,
+            meaningful,
+            snapshot: initialSnap
+          });
 
           if (meaningful && tsSec > 0) {
             const initEvt: TimelineEvent = {
@@ -489,13 +445,42 @@ export default function History() {
             imsRendered = true;
           }
         }
-      } catch (err) {
-        if (DEBUG_HISTORY) console.warn('[History DEBUG] IMS injection failed:', err);
+      } catch {
+        // non-fatal
+      }
+
+      // POST-PASS COLLAPSE: consecutive ownership transfers with same final owner
+      dbgRenderedBeforeCollapse = ui.length;
+
+      const finalUI: TimelineEvent[] = [];
+      const finalSnaps: AntSnapshot[] = [];
+      let lastKeptOwner: string | undefined;
+
+      for (const ev of ui) {
+        const ownershipLike = looksLikeOwnershipChange(ev.action, ev.legendKey);
+        const curOwner = String(ev.snapshot?.owner ?? '');
+
+        if (ownershipLike) {
+          if (curOwner && lastKeptOwner && curOwner === lastKeptOwner) {
+            dbgCollapsedTransfers++;
+            console.debug('[History DEBUG] collapsed duplicate ownership transfer', {
+              tx: ev.txHash,
+              timestamp: ev.timestamp,
+              owner: curOwner,
+              reason: 'same owner as previous kept card'
+            });
+            continue; // drop
+          }
+        }
+
+        finalUI.push(ev);
+        finalSnaps.push(ev.snapshot!);
+        if (curOwner) lastKeptOwner = curOwner;
       }
 
       // Write-through cache (serializable subset only)
       const toCache: CachedHistory = {
-        events: ui.map((e) => ({
+        events: finalUI.map((e) => ({
           action: e.action,
           actor: e.actor,
           legendKey: e.legendKey,
@@ -508,51 +493,43 @@ export default function History() {
 
       // Apply to UI
       if (!cancelled) {
+        console.info('[History DEBUG] Build summary for', canonicalName, {
+          'raw (from stream) total': dbgRawFromStream,
+          'deduped count': dbgDedupedCount,
+          'rendered cards (pre-collapse)': dbgRenderedBeforeCollapse,
+          'skipped ownership transfers (no change)': dbgSkippedNoChange,
+          'collapsed transfers (post-pass)': dbgCollapsedTransfers,
+          'IMS considered': Boolean(initialMainnetState),
+          'IMS rendered': imsRendered,
+        });
+
         receivedAnyRef.current = true;
         if (timersRef.current.empty) { clearTimeout(timersRef.current.empty); timersRef.current.empty = undefined; }
-        setEvents(ui);
-        setSnapshots(snaps);
+        setEvents(finalUI);
+        setSnapshots(finalSnaps);
         endHistoryLoadingSmoothly();
-      }
-
-      // Final debug summary
-      if (DEBUG_HISTORY) {
-        console.groupCollapsed(`[History DEBUG] Build summary for ${arnsname}`);
-        console.log('raw (from stream) total:', totalRaw);
-        console.log('deduped count:', dedupCount);
-        console.log('rendered cards:', ui.length);
-        console.log('skipped ownership transfers (no change):', skippedTransfers);
-        console.log('IMS considered:', imsConsidered, 'IMS rendered:', imsRendered);
-        console.groupEnd();
-
-        if (ownershipAudit.length) {
-          console.groupCollapsed('[History DEBUG] Ownership audit');
-          console.table(ownershipAudit);
-          console.groupEnd();
-        }
       }
     };
 
     const scheduleSettle = () => {
-      clearSettle();
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = null;
+      }
       if (WAIT_UNTIL_COMPLETE && !streamCompleted) {
-        // Do nothing; we'll paint at `complete` only.
         return;
       }
       settleTimer = setTimeout(() => {
         settleTimer = null;
-        // Fire and forget; errors are handled upstream
         void buildAndApply();
       }, SETTLE_MS);
     };
 
     const shouldSkip = warmHistRef.current && retryToken === 0;
     if (shouldSkip) {
-      if (DEBUG_HISTORY) console.info('[History DEBUG] Warm history cache present; skipping stream fetch.');
-      // Already showing cached events; no stream fetch for up to an hour.
       return () => {
         if (sub) sub.unsubscribe();
-        clearSettle();
+        if (settleTimer) clearTimeout(settleTimer);
       };
     }
 
@@ -574,13 +551,11 @@ export default function History() {
           .pipe(
             catchError((err: unknown) => {
               if (!cancelled) setError((err as any)?.message ?? 'Failed to load history');
-              if (DEBUG_HISTORY) console.error('[History DEBUG] stream error:', err);
               return EMPTY;
             })
           )
           .subscribe({
             next: async (raw: IARNSEvent[]) => {
-              totalRaw += (raw?.length ?? 0);
               const batch = await Promise.all(
                 (raw ?? []).map(async (e, idx) => {
                   const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
@@ -594,6 +569,8 @@ export default function History() {
                 })
               );
 
+              dbgRawFromStream += batch.length;
+
               // dedupe/merge by tx
               for (const { e, ts, tx } of batch) {
                 if (!byTx.has(tx)) {
@@ -604,18 +581,16 @@ export default function History() {
                   cur.e = e;
                 }
               }
-              dedupCount = byTx.size;
+              dbgDedupedCount = byTx.size;
 
-              // Instead of painting immediately, wait for quiet period.
+              // wait for quiet period
               scheduleSettle();
             },
             complete: () => {
               streamCompleted = true;
               if (WAIT_UNTIL_COMPLETE) {
-                // Paint once at the end.
                 void buildAndApply();
               } else {
-                // If nothing is scheduled, ensure we paint once more on completion.
                 if (!settleTimer) void buildAndApply();
               }
             },
@@ -630,7 +605,6 @@ export default function History() {
         if (!cancelled) {
           setError(err?.message ?? 'Failed to initialize history service');
           endHistoryLoadingSmoothly();
-          if (DEBUG_HISTORY) console.error('[History DEBUG] init error:', err);
         }
       }
     })();
@@ -638,7 +612,7 @@ export default function History() {
     return () => {
       cancelled = true;
       if (sub) sub.unsubscribe();
-      clearSettle();
+      if (settleTimer) clearTimeout(settleTimer);
       if (timersRef.current.history) clearTimeout(timersRef.current.history);
       if (timersRef.current.empty) clearTimeout(timersRef.current.empty);
     };
