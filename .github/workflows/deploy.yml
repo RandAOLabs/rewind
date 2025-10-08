@@ -56,7 +56,7 @@ jobs:
             echo "If you want to deploy without an undername, use the alternative configuration below"
             exit 1
           fi
-          echo "Deploying with undername: $DEPLOY_UNDERNAME"
+          echo "Deploying with undername: docs"
           npm run deploy-undername
 
       # Alternative deployment configuration (commented out):
