@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "deploy1": "npm run build && permaweb-deploy --deploy-folder ./dist --arns-name $DEPLOY_ARNS_NAME",
     "deploy-undername": "npm run build && permaweb-deploy --deploy-folder ./dist --arns-name $DEPLOY_ARNS_NAME --undername $DEPLOY_UNDERNAME",
-    "build:docs": "cd docs && npm run build",
-    "deploy": "npm run build:docs && permaweb-deploy --deploy-folder ./docs/build --arns-name $DEPLOY_ARNS_NAME --undername docs"
+    "build:docs": "npm ci --prefix website && npm run build --prefix website",
+    "deploy": "npm run build:docs && permaweb-deploy --deploy-folder ./website/build --arns-name $DEPLOY_ARNS_NAME --undername docs"
   },
   "dependencies": {
     "@ar.io/wayfinder-core": "1.3.0",
