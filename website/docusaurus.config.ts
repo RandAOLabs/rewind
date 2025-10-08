@@ -52,7 +52,7 @@ const config: Config = {
     footer: {
       style: 'dark',
       links: [
-        { title: 'Docs', items: [{ label: 'Rewind', to: '/docs/' }] },
+        { title: 'Docs', items: [{ label: 'Rewind', to: '/' }] },
         {
           title: 'Community',
           items: [
