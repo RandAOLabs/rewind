@@ -57,7 +57,7 @@ jobs:
             exit 1
           fi
           echo "Deploying with undername: docs"
-          npm run deploy-undername
+          npm run deploy
 
       # Alternative deployment configuration (commented out):
       # Use this if you want to deploy directly to the base ArNS without an undername
