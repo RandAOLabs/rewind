@@ -50,7 +50,7 @@ const V_DETAIL = 1;
 const V_INIT   = 1;
 const V_HIST   = 2; // excludes extraBox from cache
 
-const SETTLE_MS = 800;
+const SETTLE_MS = 1500;
 const WAIT_UNTIL_COMPLETE = false;
 
 type CachedEvent = Pick<
