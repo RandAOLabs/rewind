@@ -44,9 +44,9 @@ const config: Config = {
       title: 'Rewind',
       logo: { alt: 'Rewind Logo', src: 'img/REWIND_BLACK_LOGO.png' },
       items: [
-        { to: '/', label: 'Back to App', position: 'left' },
+        { href: 'https://rewind.ar.io/', label: 'Back to App', position: 'left' },
         { type: 'doc', docId: 'intro', label: 'Docs', position: 'left' },
-        { href: 'https://github.com/yourorg/yourrepo', label: 'GitHub', position: 'right' },
+        { href: 'https://github.com/RandAOLabs/rewind', label: 'Rewind', position: 'right' },
       ],
     },
     footer: {
