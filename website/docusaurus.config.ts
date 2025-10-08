@@ -10,7 +10,7 @@ const config: Config = {
   future: { v4: true },
 
   url: 'https://rewind.ar.io',
-  baseUrl: '/docs/',
+  baseUrl: '/',
 
   organizationName: 'facebook',
   projectName: 'rewind',
