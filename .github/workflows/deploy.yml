@@ -1,6 +1,5 @@
 name: Arweave Deploy
 
-# Trigger deployment only when pushing to the master branch
 on:
   push:
     branches:
@@ -20,10 +19,7 @@ jobs:
         with:
           node-version: '22'
 
-      # Verify that required secret and variables are present
-      # DEPLOY_KEY: Your Arweave wallet key (required secret)
-      # DEPLOY_ARNS_NAME: Your ArNS name's ANT process ID (required variable)
-      # DEPLOY_UNDERNAME: Optional undername to deploy to (optional variable)
+      # Sanity: required configs
       - name: Check required configurations
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
@@ -38,34 +34,31 @@ jobs:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
 
-      # Install project dependencies
-      - name: Install dependencies
-        run: npm install
+      # ---- Build APP (root) ----
+      - name: Install app deps & build
+        run: |
+          npm ci
+          npm run build   # must output to ./dist
 
-      # Default deployment configuration:
-      # This requires DEPLOY_UNDERNAME to be set, ensuring deployments always use an undername
-      - name: Deploy with undername (default)
+      # ---- Build DOCS (Docusaurus in ./website) ----
+      - name: Install docs deps & build
+        working-directory: ./website
+        run: |
+          npm ci
+          npm run build   # outputs ./website/build
+
+      # ---- Merge docs into app artifact under /docs ----
+      - name: Assemble final artifact
+        run: |
+          mkdir -p dist/docs
+          cp -r website/build/* dist/docs/
+          echo "Final artifact ready at ./dist (app) + ./dist/docs (docs)"
+
+      # ---- Deploy (no undername) ----
+      - name: Deploy without undername
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-          DEPLOY_UNDERNAME: docs
         run: |
-          if [ -z "$DEPLOY_UNDERNAME" ]; then
-            echo "Error: DEPLOY_UNDERNAME variable is required but not set"
-            echo "Please set the DEPLOY_UNDERNAME variable in your repository settings"
-            echo "If you want to deploy without an undername, use the alternative configuration below"
-            exit 1
-          fi
-          echo "Deploying with undername: docs"
+          echo "Deploying without undername to base ArNS"
           npm run deploy
-
-      # Alternative deployment configuration (commented out):
-      # Use this if you want to deploy directly to the base ArNS without an undername
-      # To use this, comment out the above "Deploy with undername" step and uncomment this one
-      # - name: Deploy without undername
-      #   env:
-      #    DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-      #    DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-      #   run: |
-      #    echo "Deploying without undername to base ArNS"
-      #    npm run deploy
