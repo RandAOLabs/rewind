@@ -43,7 +43,7 @@ export default function Footer() {
         >
           <button
             className="footer-icon-button"
-            onClick={() => window.open('https://docs.ar.io/arns', '_blank')}
+            onClick={() => window.open('https://docs_rewind.ar.io/', '_blank')}
           >
             <QuestionCircleOutlined className="footer-icon" />
           </button>
