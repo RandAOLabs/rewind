@@ -34,6 +34,14 @@ import { computeDelta$ } from './data/computeDelta';
 import { cache } from '../../utils/cache';
 // import SEO from '@/shared/components/SEO';
 
+/* ────────────────────────────────────────────────────────────
+   DEBUG SWITCH
+   Toggle to silence logs if needed.
+   You can also set localStorage.rewindDebugHistory = '1' to force logging.
+   ──────────────────────────────────────────────────────────── */
+const DEBUG_HISTORY =
+  (typeof window !== 'undefined' && window.localStorage?.getItem('rewindDebugHistory') === '1') || true;
+
 let rewindPromise: Promise<any> | null = null;
 async function getRewind() {
   if (!rewindPromise) {
@@ -52,7 +60,6 @@ const V_HIST   = 2; // excludes extraBox from cache
 
 const SETTLE_MS = 800;
 
-
 const WAIT_UNTIL_COMPLETE = false;
 
 type CachedEvent = Pick<
@@ -60,6 +67,37 @@ type CachedEvent = Pick<
   'action' | 'actor' | 'legendKey' | 'timestamp' | 'txHash' | 'snapshot'
 >;
 type CachedHistory = { events: CachedEvent[] };
+
+/* ────────────────────────────────────────────────────────────
+   Helpers
+   ──────────────────────────────────────────────────────────── */
+
+/** Treat any of these as “meaningful” so IMS card is worth showing */
+function isMeaningfulInitialSnapshot(s: AntSnapshot | null | undefined): boolean {
+  if (!s) return false;
+  return Boolean(
+    (s.processId && s.processId.trim()) ||
+    (s.purchasePrice && String(s.purchasePrice).trim()) ||
+    (s.expiryTs && Number(s.expiryTs) > 0) ||
+    (s.undernameLimit && Number(s.undernameLimit) > 0) ||
+    (s.description && s.description.trim()) ||
+    (s.startTime && Number(s.startTime) > 0) ||
+    (s.owner && s.owner.trim()) ||
+    (s.targetId && s.targetId.trim())
+  );
+}
+
+/** “Ownership-like” if mappings label it such (covers CreditNotice → Transfer, etc.) */
+function looksLikeOwnershipChange(action: string, legendKey: string): boolean {
+  const lk = (legendKey || '').toLowerCase();
+  const act = (action || '').toLowerCase();
+  return (
+    lk.includes('ownership') ||
+    lk.includes('owner') ||
+    /ownership\s*transfer|transfer.*owner|owner(ship)?\s*(set|changed)/i.test(`${legendKey} ${action}`) ||
+    act.includes('ownership transfer')
+  );
+}
 
 export default function History() {
   const { arnsname = '' } = useParams<{ arnsname: string }>();
@@ -147,6 +185,11 @@ export default function History() {
     // History (assembled UI) — REHYDRATE and rebuild extraBox
     const cachedHist = cache.get<CachedHistory>(keyHist, TTL_MS);
     warmHistRef.current = Boolean(cachedHist?.events?.length);
+    warmDetailRef.current = false;
+    warmInitRef.current = false;
+    warmHistRef.current = false;
+    
+
     if (cachedHist?.events?.length) {
       const rehydrated: TimelineEvent[] = cachedHist.events.map((ev) => {
         const full: TimelineEvent = {
@@ -198,7 +241,7 @@ export default function History() {
       } catch (err: any) {
         if (!alive) return;
         if (!cache.get<ARNameDetail>(keyDetail, TTL_MS)) {
-          setAntError(err?.message || 'Failed to load ANT details');
+          if (DEBUG_HISTORY) console.warn('[History] ANT detail failed:', err?.message);
         }
       } finally {
         if (alive) endAntLoadingSmoothly();
@@ -277,8 +320,6 @@ export default function History() {
 
   // ───────────────────────────────────────────────────────────
   // HISTORY REBUILD (stream) with QUIET-PERIOD BUFFER
-  // Skips entirely on warm cache unless retry. Otherwise, coalesce updates
-  // and paint once per "settle" instead of per chunk.
   // ───────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -297,6 +338,24 @@ export default function History() {
       }
     };
 
+    // Metrics for debug
+    let totalRaw = 0;
+    let dedupCount = 0;
+    let renderedCount = 0;
+    let skippedTransfers = 0;
+    let imsConsidered = false;
+    let imsRendered = false;
+
+    const ownershipAudit: Array<{
+      tx: string;
+      action: string;
+      legendKey: string;
+      ts: number;
+      prevOwner: string;
+      nextOwner: string;
+      decision: 'kept' | 'skipped';
+    }> = [];
+
     // Build UI from current byTx state (sorted), then set state + cache
     const buildAndApply = async () => {
       // Sort
@@ -311,16 +370,49 @@ export default function History() {
       const snaps: AntSnapshot[] = [];
 
       for (const { e, ts, tx } of all) {
+        // capture the snapshot BEFORE applying the current delta
+        const prevSnap = snap;
+
         const [actor, delta] = await Promise.all([
           Promise.resolve(e.getInitiator?.()),
           firstValueFrom(computeDelta$(e)),
         ]);
         
-        snap = applyDelta(snap, delta);
+        // compute next snapshot
+        const nextSnap = applyDelta(prevSnap, delta);
 
         const cls = e.constructor?.name ?? 'Unknown';
         const action = classToAction(cls);
         const legendKey = classToLegend(cls);
+
+        /* ── NEW RULE #2: hide ownership transfers that don't change owner ── */
+        if (looksLikeOwnershipChange(action, legendKey)) {
+          const prevOwner = String(prevSnap.owner ?? '');
+          const nextOwner = String(nextSnap.owner ?? '');
+          const noChange = prevOwner === nextOwner || !nextOwner;
+
+          if (DEBUG_HISTORY) {
+            ownershipAudit.push({
+              tx,
+              action,
+              legendKey,
+              ts,
+              prevOwner,
+              nextOwner,
+              decision: noChange ? 'skipped' : 'kept',
+            });
+          }
+
+          if (noChange) {
+            // advance state but DO NOT add a card
+            snap = nextSnap;
+            skippedTransfers++;
+            continue;
+          }
+        }
+
+        // advance state and render the card
+        snap = nextSnap;
 
         const uiEvt: TimelineEvent = {
           action,
@@ -337,10 +429,12 @@ export default function History() {
         snaps.push(snap);
       }
 
-      // Inject Initial Mainnet State (if present)
+      // Inject Initial Mainnet State (if present AND meaningful)
       try {
         const ims = initialMainnetState;
         if (ims) {
+          imsConsidered = true;
+
           const [
             processId,
             purchasePriceCA,
@@ -370,22 +464,33 @@ export default function History() {
           const tsCandidate = ims.getEventTimeStamp?.();
           const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
 
-          const initEvt: TimelineEvent = {
-            action: 'Initial Mainnet State',
-            actor: '',
-            legendKey: 'initial-mainnet-state',
-            timestamp: tsSec,
-            txHash: `initial:${arnsname}`,
-            rawEvent: {} as IARNSEvent,
-            snapshot: initialSnap,
-          };
-          initEvt.extraBox = buildExtraBox(initEvt);
+          const meaningful = isMeaningfulInitialSnapshot(initialSnap);
+          if (DEBUG_HISTORY) {
+            console.groupCollapsed(`[History DEBUG] IMS decision for ${arnsname}`);
+            console.log('initialSnap:', initialSnap);
+            console.log('tsSec:', tsSec, 'meaningful:', meaningful);
+            console.groupEnd();
+          }
 
-          ui.unshift(initEvt);
-          snaps.unshift(initialSnap);
+          if (meaningful && tsSec > 0) {
+            const initEvt: TimelineEvent = {
+              action: 'Initial Mainnet State',
+              actor: '',
+              legendKey: 'initial-mainnet-state',
+              timestamp: tsSec,
+              txHash: `initial:${arnsname}`,
+              rawEvent: {} as IARNSEvent,
+              snapshot: initialSnap,
+            };
+            initEvt.extraBox = buildExtraBox(initEvt);
+
+            ui.unshift(initEvt);
+            snaps.unshift(initialSnap);
+            imsRendered = true;
+          }
         }
-      } catch {
-        // non-fatal
+      } catch (err) {
+        if (DEBUG_HISTORY) console.warn('[History DEBUG] IMS injection failed:', err);
       }
 
       // Write-through cache (serializable subset only)
@@ -409,6 +514,23 @@ export default function History() {
         setSnapshots(snaps);
         endHistoryLoadingSmoothly();
       }
+
+      // Final debug summary
+      if (DEBUG_HISTORY) {
+        console.groupCollapsed(`[History DEBUG] Build summary for ${arnsname}`);
+        console.log('raw (from stream) total:', totalRaw);
+        console.log('deduped count:', dedupCount);
+        console.log('rendered cards:', ui.length);
+        console.log('skipped ownership transfers (no change):', skippedTransfers);
+        console.log('IMS considered:', imsConsidered, 'IMS rendered:', imsRendered);
+        console.groupEnd();
+
+        if (ownershipAudit.length) {
+          console.groupCollapsed('[History DEBUG] Ownership audit');
+          console.table(ownershipAudit);
+          console.groupEnd();
+        }
+      }
     };
 
     const scheduleSettle = () => {
@@ -426,6 +548,7 @@ export default function History() {
 
     const shouldSkip = warmHistRef.current && retryToken === 0;
     if (shouldSkip) {
+      if (DEBUG_HISTORY) console.info('[History DEBUG] Warm history cache present; skipping stream fetch.');
       // Already showing cached events; no stream fetch for up to an hour.
       return () => {
         if (sub) sub.unsubscribe();
@@ -451,14 +574,15 @@ export default function History() {
           .pipe(
             catchError((err: unknown) => {
               if (!cancelled) setError((err as any)?.message ?? 'Failed to load history');
+              if (DEBUG_HISTORY) console.error('[History DEBUG] stream error:', err);
               return EMPTY;
             })
           )
           .subscribe({
             next: async (raw: IARNSEvent[]) => {
+              totalRaw += (raw?.length ?? 0);
               const batch = await Promise.all(
                 (raw ?? []).map(async (e, idx) => {
-                  console.log(Promise.resolve(e));
                   const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
                   const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
                   const ts = Number.isFinite(tsNum) ? tsNum : 0;
@@ -480,6 +604,7 @@ export default function History() {
                   cur.e = e;
                 }
               }
+              dedupCount = byTx.size;
 
               // Instead of painting immediately, wait for quiet period.
               scheduleSettle();
@@ -505,6 +630,7 @@ export default function History() {
         if (!cancelled) {
           setError(err?.message ?? 'Failed to initialize history service');
           endHistoryLoadingSmoothly();
+          if (DEBUG_HISTORY) console.error('[History DEBUG] init error:', err);
         }
       }
     })();
@@ -540,28 +666,23 @@ export default function History() {
 
   if (antLoading || loading) return <LoadingScreen />;
 
-  // if (!antLoading && (antError || !antDetail)) {
-  //   return (
-  //     <div className="history">
-  //       <FailureView
-  //         title="Couldn’t load ANT details"
-  //         error={antError ?? { code: 'NOT_FOUND', message: 'The name may not exist, or the gateway is unavailable.', where: 'ant' }}
-  //         context={{ arnsname }}
-  //         onRetry={doRetry}
-  //         onHome={() => navigate('/')}
-  //       />
-  //     </div>
-  //   );
-  // }
+  if (!antLoading && (antError)) {
+    return (
+      <div className="history">
+        <FailureView
+          title="Couldn’t load ANT details"
+          error={antError ?? { code: 'NOT_FOUND', message: 'The name may not exist, or the gateway is unavailable.', where: 'ant' }}
+          context={{ arnsname }}
+          onRetry={doRetry}
+          onHome={() => navigate('/')}
+        />
+      </div>
+    );
+  }
   
   if (error || events.length < 1) {
     return (
       <div className="history">
-        {/* <SEO
-          title={`${antDetail?.name ?? "Rewind"} — History`}
-          description={`History view for ${antDetail?.name ?? "this ArNS name"} on Rewind.`}
-          image="/REWIND_WHITE_LOGO.png"
-        /> */}
         <FailureView
           title={error ? 'Couldn’t load history' : 'No history yet'}
           error={error ?? null}
