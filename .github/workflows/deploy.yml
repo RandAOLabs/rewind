@@ -48,7 +48,7 @@ jobs:
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-          DEPLOY_UNDERNAME: ${{ vars.DEPLOY_UNDERNAME }}
+          DEPLOY_UNDERNAME: docs
         run: |
           if [ -z "$DEPLOY_UNDERNAME" ]; then
             echo "Error: DEPLOY_UNDERNAME variable is required but not set"
