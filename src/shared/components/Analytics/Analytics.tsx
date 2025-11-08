@@ -12,7 +12,7 @@ export function Analytics({ children }: AnalyticsProps) {
   useEffect(() => {
     // Initialize Google Analytics with environment config
     ga4Analytics.initialize({
-      measurementId: viteEnvironment.getWithDefault('GA_MEASUREMENT_ID', 'G-XXXXXXXXXX')
+      measurementId: viteEnvironment.getWithDefault('GA_MEASUREMENT_ID', 'G-V3BCV8PE1F')
     })
   }, [])
 
