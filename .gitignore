@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets - never commit Arweave keys
+wallet.json
+*.jwk
+*wallet*.json
+.env
+.env.*
+!.env.example
+
+# Deploy receipts and the Turbo folder-reuse index
+.deploy/
+shh.json

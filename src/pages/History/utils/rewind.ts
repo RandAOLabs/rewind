@@ -1,16 +1,14 @@
-// src/services/rewind.ts
-import { ARIORewindService, type IARIORewindService } from 'ao-js-sdk';
-
 /**
- * Lazy, one-time async init of the rewind service.
- * Subsequent calls share the same Promise.
+ * Thin re-export of the ArNS history service.
+ *
+ * Previously this lazily constructed `ao-js-sdk`'s `ARIORewindService`. There is
+ * no service object to build any more — the replacement is stateless functions
+ * over Arweave GraphQL and the AR.IO gateway REST API.
  */
-let _rewindPromise: Promise<IARIORewindService> | null = null;
+export {
+  getEventHistory,
+  getEventHistory$,
+  getAntDetail,
+} from '../../../services/arns';
 
-export function getRewind(): Promise<IARIORewindService> {
-  if (!_rewindPromise) {
-    // autoConfiguration() is async in latest ao-js-sdk
-    _rewindPromise = (ARIORewindService as any).autoConfiguration();
-  }
-  return _rewindPromise;
-}
+export type { RewindEvent, ArNameDetail } from '../../../services/arns';

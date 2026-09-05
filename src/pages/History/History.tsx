@@ -8,12 +8,14 @@ import Holobar from './components/Holobar/Holobar';
 import Legend from './Legend';
 
 import {
-  ARIORewindService,
-  IARNSEvent,
-  ARNameDetail,
-} from 'ao-js-sdk';
+  getAntDetail,
+  getEventHistory$,
+  getGenesisRecord,
+  type RewindEvent,
+  type ArNameDetail,
+} from '../../services/arns';
 
-import { EMPTY, firstValueFrom, Subscription } from 'rxjs';
+import { EMPTY, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import './History.css';
 import EventDetails from './EventDetails';
@@ -22,33 +24,28 @@ import { AppError } from '../../errors/appError';
 // Extracted components & mappings
 import LoadingScreen from './components/LoadingScreen';
 import CurrentAntBar from './components/CurrentAntBar';
-import { classToAction, classToLegend } from './data/eventMappings';
+import { shortTx } from './components/TxidLink';
+import { kindToAction, kindToLegend } from './data/eventMappings';
 
 // Extracted types, data helpers, and computeDelta$
 import { AntSnapshot, TimelineEvent, initialSnapshot } from './types';
-import { applyDelta, toEpochSeconds, firstDefined } from './utils/data';
+import { applyDelta, toEpochSeconds } from './utils/data';
 import { buildExtraBox } from './data/extraBoxBuilders';
-import { computeDelta$ } from './data/computeDelta';
+import { computeDelta } from './data/computeDelta';
 
 // Cache
 import { cache } from '../../utils/cache';
 // import SEO from '@/shared/components/SEO';
 
-let rewindPromise: Promise<any> | null = null;
-async function getRewind() {
-  if (!rewindPromise) {
-    rewindPromise = ARIORewindService.autoConfiguration();
-  }
-  return rewindPromise;
-}
-
 const MIN_SPINNER_MS = 600;     // minimum spinner display to avoid flicker
 const EMPTY_DEBOUNCE_MS = 700;  // wait before declaring "no history yet"
 
 const TTL_MS = 3600_000; // 1 hour
-const V_DETAIL = 1;
-const V_INIT   = 1;
-const V_HIST   = 2; // excludes extraBox from cache
+// Bumped when the shape or coverage of cached data changes, so a returning
+// visitor is not served an AO-only timeline from before the Solana era landed.
+const V_DETAIL = 2;
+const V_INIT   = 2;
+const V_HIST   = 3;
 
 const SETTLE_MS = 1500;
 const WAIT_UNTIL_COMPLETE = false;
@@ -74,6 +71,18 @@ function isMeaningfulInitialSnapshot(s: AntSnapshot | null | undefined): boolean
     (s.owner && s.owner.trim()) ||
     (s.targetId && s.targetId.trim())
   );
+}
+
+/**
+ * Link a card to the right explorer for the chain it came from.
+ *
+ * AO message ids are 43-char base64url; Solana signatures are longer base58. The
+ * two eras live in one timeline, so pick per event rather than per page.
+ */
+function explorerUrl(txHash: string): string {
+  return txHash.length > 50
+    ? `https://solscan.io/tx/${txHash}`
+    : `https://www.ao.link/#/message/${txHash}`;
 }
 
 /** “Ownership-like” if mappings label it such (covers CreditNotice → Transfer, etc.) */
@@ -112,7 +121,7 @@ export default function History() {
   const detailRef = useRef<HTMLDivElement>(null);
 
   // ANT detail state
-  const [antDetail, setAntDetail]     = useState<ARNameDetail | null>(null);
+  const [antDetail, setAntDetail]     = useState<ArNameDetail | null>(null);
   const [antLoading, setAntLoading]   = useState(true);
   const [antError, setAntError]       = useState<AppError | null>(null);
 
@@ -156,7 +165,7 @@ export default function History() {
   // ───────────────────────────────────────────────────────────
   useEffect(() => {
     // ANT detail
-    const cachedDetail = cache.get<ARNameDetail>(keyDetail, TTL_MS);
+    const cachedDetail = cache.get<ArNameDetail>(keyDetail, TTL_MS);
     warmDetailRef.current = Boolean(cachedDetail);
     if (cachedDetail) {
       setAntDetail(cachedDetail);
@@ -178,7 +187,7 @@ export default function History() {
       const rehydrated: TimelineEvent[] = cachedHist.events.map((ev) => {
         const full: TimelineEvent = {
           ...ev,
-          rawEvent: {} as IARNSEvent, // non-serializable; dummy for type
+          rawEvent: {} as RewindEvent, // non-serializable; dummy for type
         };
         // IMPORTANT: rebuild extraBox, do not read from cache
         full.extraBox = buildExtraBox(full);
@@ -217,14 +226,13 @@ export default function History() {
 
     (async () => {
       try {
-        const service = await getRewind();
-        const detail = await service.getAntDetail(arnsname);
+        const detail = await getAntDetail(arnsname);
         if (!alive) return;
         setAntDetail(detail);
-        cache.set(keyDetail, detail);
+        if (detail) cache.set(keyDetail, detail);
       } catch (err: any) {
         if (!alive) return;
-        if (!cache.get<ARNameDetail>(keyDetail, TTL_MS)) {
+        if (!cache.get<ArNameDetail>(keyDetail, TTL_MS)) {
           // swallow to avoid double error screens when history still renders
         }
       } finally {
@@ -251,18 +259,15 @@ export default function History() {
 
     (async () => {
       try {
-        const service = await getRewind();
         const canonical = arnsname.trim().toLowerCase();
-        const ims = service.getMainnetInitialState
-          ? service.getMainnetInitialState(canonical)
-          : undefined;
+        const ims = await getGenesisRecord(canonical);
 
         if (!alive) return;
         const next = ims ?? null;
         setInitialMainnetState(next);
         cache.set(keyInit, next);
       } catch (e) {
-        console.warn('[History] getMainnetInitialState failed:', e);
+        console.warn('[History] genesis record lookup failed:', e);
         if (!alive) return;
         setInitialMainnetState(prev => prev ?? null);
       }
@@ -311,7 +316,7 @@ export default function History() {
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     let streamCompleted = false;
 
-    type Item = { e: IARNSEvent; ts: number; tx: string; ord: number };
+    type Item = { e: RewindEvent; ts: number; tx: string; ord: number };
     const byTx = new Map<string, Item>();
     let ordCounter = 0;
 
@@ -346,17 +351,14 @@ export default function History() {
         // snapshot BEFORE
         const prevSnap = snap;
 
-        const [actor, delta] = await Promise.all([
-          Promise.resolve(e.getInitiator?.()),
-          firstValueFrom(computeDelta$(e)),
-        ]);
+        const actor = e.actor;
+        const delta = computeDelta(e);
 
         // compute next snapshot
         const nextSnap = applyDelta(prevSnap, delta);
 
-        const cls = e.constructor?.name ?? 'Unknown';
-        const action = classToAction(cls);
-        const legendKey = classToLegend(cls);
+        const action = kindToAction(e.kind);
+        const legendKey = kindToLegend(e.kind);
 
         // NEW RULE: skip ownership transfers that don't change owner
         if (looksLikeOwnershipChange(action, legendKey)) {
@@ -392,34 +394,27 @@ export default function History() {
       try {
         const ims = initialMainnetState;
         if (ims) {
-          const [
+          // Plain record from the vendored genesis table (timestamps in ms).
+          const {
             processId,
-            purchasePriceCA,
+            purchasePrice,
             type,
-            startTime,
-            endTime,
+            startTimestamp: startTime,
+            endTimestamp: endTime,
             undernameLimit,
-          ] = await Promise.all([
-            Promise.resolve(ims.getProcessId?.()),
-            Promise.resolve(ims.getPurchasePrice?.()),
-            Promise.resolve(ims.getType?.()),
-            Promise.resolve(ims.getStartTime?.()),
-            Promise.resolve(ims.getEndTime?.()),
-            Promise.resolve(ims.getUndernameLimit?.()),
-          ]);
+          } = ims;
 
           const initialSnap: AntSnapshot = {
             ...initialSnapshot,
             processId: processId ?? '',
-            purchasePrice: purchasePriceCA?.toString?.() ?? String(purchasePriceCA ?? ''),
+            purchasePrice: purchasePrice ? String(purchasePrice) : '',
             startTime: toEpochSeconds(startTime) * 1000,
             expiryTs:  toEpochSeconds(endTime)   * 1000,
             undernameLimit,
             description: type ? String(type) : undefined,
           };
 
-          const tsCandidate = ims.getEventTimeStamp?.();
-          const tsSec = toEpochSeconds(firstDefined(tsCandidate, startTime));
+          const tsSec = toEpochSeconds(startTime);
 
           const meaningful = isMeaningfulInitialSnapshot(initialSnap);
           console.debug('[History DEBUG] IMS snapshot', {
@@ -435,7 +430,7 @@ export default function History() {
               legendKey: 'initial-mainnet-state',
               timestamp: tsSec,
               txHash: `initial:${arnsname}`,
-              rawEvent: {} as IARNSEvent,
+              rawEvent: {} as RewindEvent,
               snapshot: initialSnap,
             };
             initEvt.extraBox = buildExtraBox(initEvt);
@@ -543,11 +538,9 @@ export default function History() {
 
     (async () => {
       try {
-        const service = await getRewind();
         if (cancelled) return;
 
-        sub = service
-          .getEventHistory$(arnsname)
+        sub = getEventHistory$(arnsname)
           .pipe(
             catchError((err: unknown) => {
               if (!cancelled) setError((err as any)?.message ?? 'Failed to load history');
@@ -555,19 +548,13 @@ export default function History() {
             })
           )
           .subscribe({
-            next: async (raw: IARNSEvent[]) => {
-              const batch = await Promise.all(
-                (raw ?? []).map(async (e, idx) => {
-                  const tsAny = await Promise.resolve((e as any).getEventTimeStamp?.());
-                  const tsNum = typeof tsAny === 'number' ? tsAny : Number(tsAny ?? 0);
-                  const ts = Number.isFinite(tsNum) ? tsNum : 0;
-
-                  const txRaw = await Promise.resolve(e.getEventMessageId?.());
-                  const tx = String(txRaw ?? `fallback:${ts}:${idx}`);
-
-                  return { e, ts, tx };
-                })
-              );
+            next: (raw: RewindEvent[]) => {
+              // Timestamp and message id are plain fields now; no per-event await.
+              const batch = (raw ?? []).map((e, idx) => ({
+                e,
+                ts: Number.isFinite(e.ts) ? e.ts : 0,
+                tx: e.txId || `fallback:${e.ts}:${idx}`,
+              }));
 
               dbgRawFromStream += batch.length;
 
@@ -794,11 +781,12 @@ export default function History() {
             {!isInitial && (
               <span className="txid">
                 <a
-                  href={`https://www.ao.link/#/message/${st.txHash}`}
+                  href={explorerUrl(st.txHash)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  title={st.txHash}
                 >
-                  {st.txHash}
+                  {shortTx(st.txHash, 8, 8)}
                 </a>
               </span>
             )}

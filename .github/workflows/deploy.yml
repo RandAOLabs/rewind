@@ -1,71 +1,65 @@
-name: Arweave Deploy
+name: Permaweb Deploy
 
-# Trigger deployment only when pushing to the master branch
+# One workflow, one deploy per push. There used to be a second, byte-identical
+# workflow (deploy-undername.yml) with the same job name and trigger, so every
+# push ran two full deploys against the same record and occasionally raced.
 on:
   push:
     branches:
       - master
+  # Uploading is safe to do by hand: it never touches the ArNS record, it only
+  # produces a manifest id.
+  workflow_dispatch:
+
+# A second push while a deploy is in flight should supersede it, not race it.
+concurrency:
+  group: permaweb-deploy
+  cancel-in-progress: false
 
 jobs:
-  Arweave-build-and-deploy:
+  build-and-upload:
     runs-on: ubuntu-latest
     env:
       VITE_GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
 
-      # Verify that required secret and variables are present
-      # DEPLOY_KEY: Your Arweave wallet key (required secret)
-      # DEPLOY_ARNS_NAME: Your ArNS name's ANT process ID (required variable)
-      # DEPLOY_UNDERNAME: Optional undername to deploy to (optional variable)
-      - name: Check required configurations
-        run: |
-          if [ -z "$DEPLOY_KEY" ]; then
-            echo "Error: DEPLOY_KEY secret is required but not set"
-            exit 1
-          fi
-          if [ -z "$DEPLOY_ARNS_NAME" ]; then
-            echo "Error: DEPLOY_ARNS_NAME variable is required but not set"
-            exit 1
-          fi
+      # `npm ci` installs exactly the lockfile, unlike `npm install`, which was
+      # free to resolve different versions than the ones this was tested against.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and lint
+        run: npx tsc -b
+
+      - name: Build
+        run: npm run build
+
+      # Fail before signing anything if the wallet cannot pay.
+      - name: Preflight Turbo credits
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
+        run: npm run deploy:check
 
-      # Install project dependencies
-      - name: Install dependencies
-        run: npm install
-
-      # Default deployment configuration:
-      # This requires DEPLOY_UNDERNAME to be set, ensuring deployments always use an undername
-      # - name: Deploy with undername (default)
-      #   env:
-      #     DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-      #     DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
-      #     DEPLOY_UNDERNAME: ${{ vars.DEPLOY_UNDERNAME }}
-      #   run: |
-      #     if [ -z "$DEPLOY_UNDERNAME" ]; then
-      #       echo "Error: DEPLOY_UNDERNAME variable is required but not set"
-      #       echo "Please set the DEPLOY_UNDERNAME variable in your repository settings"
-      #       echo "If you want to deploy without an undername, use the alternative configuration below"
-      #       exit 1
-      #     fi
-      #     echo "Deploying with undername: $DEPLOY_UNDERNAME"
-      #     npm run deploy-undername
-
-      # Alternative deployment configuration (commented out):
-      # Use this if you want to deploy directly to the base ArNS without an undername
-      # To use this, comment out the above "Deploy with undername" step and uncomment this one
-      - name: Deploy without undername
+      # Uploads only files whose bytes are not already on Arweave. The reuse
+      # index is recovered from the gateway, so a fresh runner with no cache
+      # still avoids re-paying for unchanged chunks.
+      - name: Upload to permaweb
+        id: upload
         env:
-         DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-         DEPLOY_ARNS_NAME: ${{ vars.DEPLOY_ARNS_NAME }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: node scripts/deploy-site.mjs
+
+      # `rewind` is a Solana ANT now, so an Arweave JWK cannot update the name.
+      # The manifest id is surfaced here for an operator to link by hand.
+      - name: Manifest id
         run: |
-         echo "Deploying without undername to base ArNS"
-         npm run deploy
+          echo "Manifest: ${{ steps.upload.outputs.manifest_id }}"
+          echo "Link this id to the Solana ANT to publish it."

@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
-import { viteSingleFile } from 'vite-plugin-singlefile';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -18,7 +17,6 @@ export default defineConfig({
         'crypto',
       ],
     }),
-    viteSingleFile(),
     VitePWA({
       disable: true, 
       registerType: 'autoUpdate',
@@ -69,13 +67,14 @@ export default defineConfig({
   ],
   build: {
 
-    // Enable minification
-    minify: false,
+    // Minify: the bundle ships over a gateway and every byte is paid for once.
+    minify: 'terser',
     
     // Generate sourcemaps for production
     sourcemap: false,
-    // Optimize CSS
-    cssCodeSplit: false,
+    // Split CSS so a style-only change does not invalidate the JS chunk, and
+    // vice versa — chunk reuse is what makes incremental deploys cheap.
+    cssCodeSplit: true,
     // Enable asset optimization
     assetsInlineLimit: 4096,
     // Reduce chunk size warnings

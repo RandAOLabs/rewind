@@ -1,57 +1,66 @@
-import {
-    BuyNameEvent,
-    ReturnedNameEvent,
-    ExtendLeaseEvent,
-    IncreaseUndernameEvent,
-    RecordEvent,
-    SetRecordEvent,
-    UpgradeNameEvent,
-    StateNoticeEvent,
-    CreditNoticeEvent,
-    DebitNoticeEvent,
-    SetNameNoticeEvent,
-    SetDescriptionNoticeEvent,
-    SetTickerNoticeEvent,
-    ReassignNameNoticeEvent,
-    ReassignNameEvent
-  } from 'ao-js-sdk';
-  
-  export function classToAction(cls: string): string {
-    switch (cls) {
-      case BuyNameEvent.name:           return 'ArNS Name Purchase';
-      case ReturnedNameEvent.name:      return 'Returned ANT Name';
-      case ExtendLeaseEvent.name:       return 'Extended Lease';
-      case IncreaseUndernameEvent.name: return 'Increased Undername Limit';
-      case RecordEvent.name:            return 'RecordEvent';
-      case SetRecordEvent.name:         return 'Set Record Content';
-      case UpgradeNameEvent.name:       return 'Permanent ArNS Name Purchase';  
-      case StateNoticeEvent.name:       return 'State Notice';
-      case CreditNoticeEvent.name:      return 'Ownership Transfer';
-      case DebitNoticeEvent.name:       return 'Debit Notice';
-      case SetNameNoticeEvent.name:     return 'Set ANT Name';
-      case SetDescriptionNoticeEvent.name: return 'Set ANT Description';
-      case SetTickerNoticeEvent.name:   return 'Set ANT Ticker';
-      case ReassignNameEvent.name: return 'ANT Process Change';
-      default:                          return 'Unknown Event';
-    }
-  }
-  
-  export function classToLegend(cls: string): string {
-    switch (cls) {
-      case BuyNameEvent.name:           return 'ant-buy-event';
-      case ReturnedNameEvent.name:      return 'ant-return-event';
-      case ExtendLeaseEvent.name:       return 'ant-extend-lease-event';
-      case IncreaseUndernameEvent.name: return 'undername-creation';
-      case RecordEvent.name:            return 'ant-content-change';
-      case SetRecordEvent.name:         return 'ant-content-change';
-      case UpgradeNameEvent.name:       return 'ant-upgrade-event';
-      case StateNoticeEvent.name:       return 'ant-state-change';
-      case CreditNoticeEvent.name:      return 'ant-ownership-transfer';
-      case DebitNoticeEvent.name:       return 'ant-debit-notice';
-      case SetNameNoticeEvent.name:     return 'ant-name-set  ';
-      case SetDescriptionNoticeEvent.name: return 'ant-description-set';
-      case SetTickerNoticeEvent.name:   return 'ant-ticker-set';
-      case ReassignNameEvent.name: return 'ant-reassign-event';
-      default:                          return 'multiple-changes';
-    }
-  }
+import type { RewindEventKind } from '../../../services/arns';
+
+/**
+ * Maps an event kind to its card title and legend class.
+ *
+ * Previously this switched on `ao-js-sdk` class names via `SomeEvent.name`,
+ * which broke under minification (class names are mangled) and coupled the UI to
+ * a third-party package. Kinds are plain strings and survive the build.
+ */
+
+const ACTION_LABELS: Record<RewindEventKind, string> = {
+  'buy-name': 'ArNS Name Purchase',
+  'returned-name': 'Returned ANT Name',
+  'extend-lease': 'Extended Lease',
+  'increase-undername': 'Increased Undername Limit',
+  'upgrade-name': 'Permanent ArNS Name Purchase',
+  'reassign-name': 'ANT Process Change',
+  'set-record': 'Set Record Content',
+  'remove-record': 'Removed Record',
+  'set-name': 'Set ANT Name',
+  'set-ticker': 'Set ANT Ticker',
+  'set-description': 'Set ANT Description',
+  'set-keywords': 'Set ANT Keywords',
+  'set-logo': 'Set ANT Logo',
+  'set-controller': 'Added Controller',
+  'remove-controller': 'Removed Controller',
+  'state-notice': 'State Notice',
+  'credit-notice': 'Ownership Transfer',
+  'debit-notice': 'Debit Notice',
+  unknown: 'Unknown Event',
+};
+
+const LEGEND_KEYS: Record<RewindEventKind, string> = {
+  'buy-name': 'ant-buy-event',
+  'returned-name': 'ant-return-event',
+  'extend-lease': 'ant-extend-lease-event',
+  'increase-undername': 'undername-creation',
+  'upgrade-name': 'ant-upgrade-event',
+  'reassign-name': 'ant-reassign-event',
+  'set-record': 'ant-content-change',
+  'remove-record': 'ant-content-change',
+  'set-name': 'ant-name-set',
+  'set-ticker': 'ant-ticker-set',
+  'set-description': 'ant-description-set',
+  'set-keywords': 'ant-description-set',
+  'set-logo': 'ant-description-set',
+  'set-controller': 'ant-controller-change',
+  'remove-controller': 'ant-controller-change',
+  'state-notice': 'ant-state-change',
+  'credit-notice': 'ant-ownership-transfer',
+  'debit-notice': 'ant-debit-notice',
+  unknown: 'multiple-changes',
+};
+
+export function kindToAction(kind: RewindEventKind): string {
+  return ACTION_LABELS[kind] ?? ACTION_LABELS.unknown;
+}
+
+export function kindToLegend(kind: RewindEventKind): string {
+  return LEGEND_KEYS[kind] ?? LEGEND_KEYS.unknown;
+}
+
+/** @deprecated Retained so older call sites keep compiling. */
+export const classToAction = kindToAction;
+/** @deprecated Retained so older call sites keep compiling. */
+export const classToLegend = kindToLegend;

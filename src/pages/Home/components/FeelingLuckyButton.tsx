@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RandAOService } from 'ao-js-sdk';
 import './FeelingLuckyButton.css';
 import namesRaw from './arns-names.csv?raw';
 
@@ -11,26 +10,17 @@ const arnsNames: string[] = namesRaw
   .filter(Boolean)
   .filter(n => n.toLowerCase() !== 'name');
 
-// ----- Lazy, memoized service init (no top-level await) -----
-type RandAO = Awaited<ReturnType<typeof RandAOService.autoConfiguration>>;
-let _randAOPromise: Promise<RandAO> | null = null;
-
-async function getRandAO(): Promise<RandAO> {
-  if (!_randAOPromise) {
-    // Works whether autoConfiguration returns a value or a promise
-    const maybe = RandAOService.autoConfiguration() as any;
-    _randAOPromise = typeof maybe?.then === 'function' ? maybe : Promise.resolve(maybe);
-  }
-  return _randAOPromise;
-}
-
-// Exported API stays the same
+/**
+ * Pick a name from the bundled list.
+ *
+ * This used to await RandAO's entropy process first, but the name was always
+ * chosen with `Math.random()` from the local CSV regardless — the network call
+ * changed nothing about the result. When that process went offline the await
+ * never settled, which is why the home page sat on "Random names loading…"
+ * forever.
+ */
 export async function getRandomArNSName(): Promise<string> {
-  const service = await getRandAO();
-  // Keep the entropy touch to preserve behavior/side-effects
-  await service.getMostRecentEntropy();
-  const name = arnsNames[Math.floor(Math.random() * arnsNames.length)];
-  return name;
+  return arnsNames[Math.floor(Math.random() * arnsNames.length)];
 }
 
 export default function FeelingLuckyButton() {
